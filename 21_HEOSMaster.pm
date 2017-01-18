@@ -43,10 +43,13 @@ use warnings;
 
 use JSON;
 
+
+my $missingModulRemote;
+eval "use Net::Telnet;1" or $missingModulRemote .= "Net::Telnet ";
 use IO::Socket::INET;
 
 
-my $version = "0.0.1";
+my $version = "0.0.22";
 
 
 
@@ -55,9 +58,11 @@ sub HEOSMaster_Initialize($);
 sub HEOSMaster_Define($$);
 sub HEOSMaster_Undef($$);
 sub HEOSMaster_Set($@);
+sub HEOSMaster_Connect($);
+sub HEOSMaster_Disconnect($);
+sub HEOSMaster_send($);
+sub HEOSMaster_Read($);
 
-# Subprocess functions
-sub HEOSMaster_firstConnect($);
 
 
 
@@ -135,52 +140,122 @@ sub HEOSMaster_Set($@) {
     my ($arg, @params) = @args;
 
     
-    if($cmd eq 'startFirstConnect') {
-        return "usage: startFirstConnect" if( @args != 0 );
+    if($cmd eq 'startConnect') {
+        return "usage: startConnect" if( @args != 0 );
 
-       HEOSMaster_firstConnect($hash);
+       HEOSMaster_Connect($hash);
 
         return undef;
         
+    } elsif($cmd eq 'stopConnect') {
+        return "usage: stopConnect" if( @args != 0 );
+
+        HEOSMaster_Disconnect($hash);
+
+        return undef;   
+        
+     } elsif($cmd eq 'send') {
+        return "usage: send" if( @args != 0 );
+
+        HEOSMaster_send($hash);
+
+        return undef;   
+        
     } else {
         my  $list = ""; 
-        $list .= "startFirstConnect:noArg";
+        $list .= "startConnect:noArg stopConnect:noArg send:noArg";
         return "Unknown argument $cmd, choose one of $list";
     }
 }
 
-sub HEOSMaster_firstConnect($) {
+sub HEOSMaster_Connect($) {
 
     my $hash    = shift;
     my $name    = $hash->{NAME};
     my $host    = $hash->{HOST};
     my $port    = 1255;
-    my $timeout = 5;
+    my $timeout = 1;
     my $msg;
     
     Log3 $name, 3, "HEOSMaster ($name) - Baue Socket Verbindung auf";
     
-    my $socket = IO::Socket::INET->new(PeerAddr => $host,
-        PeerPort => $port,
-        Proto    => 'tcp',
-        Type     => SOCK_STREAM,
-        Timeout  => $timeout )
+    
+    #my $socket = IO::Socket::INET->new(PeerAddr => $host,
+    #    PeerPort => $port,
+    #    Proto    => 'tcp',
+    #    Type     => SOCK_STREAM,
+    #    Timeout  => $timeout )
+    #    or return Log3 $name, 3, "HEOSMaster ($name) Couldn't connect to $host:$port";
+    
+    my $socket = new Net::Telnet ( Host=>$host,
+        Port => $port,
+        Timeout=>$timeout,
+        Errmode=>'return')
         or return Log3 $name, 3, "HEOSMaster ($name) Couldn't connect to $host:$port";
         
-    $socket->send('heos://player/get_players');
+    $hash->{FD}    = $socket->fileno();
+    $hash->{CD}    = $socket;         # sysread / close won't work on fileno
+    $selectlist{$name} = $hash;
+    
+    readingsSingleUpdate($hash, 'state', 'connected', 1 );
+    
+    Log3 $name, 3, "HEOSMaster ($name) - Socket Connected";
+    
+    syswrite($hash->{CD}, "heos://system/register_for_change_events?enable=on\r\n") if( defined($hash->{CD}) );
+}
+
+sub HEOSMaster_Disconnect($) {
+
+    my $hash    = shift;
+    my $name    = $hash->{NAME};
+    
+    return if( !$hash->{CD} );
+
+    close($hash->{CD}) if($hash->{CD});
+    delete($hash->{FD});
+    delete($hash->{CD});
+    delete($selectlist{$name});
+    readingsSingleUpdate($hash, 'state', 'not connected', 1 );
+}
+
+sub HEOSMaster_send($) {
+    
+    my $hash = shift;
+    my $name = $hash->{NAME};
+    my $buf;
+    
+    return  Log3 $name, 3, "HEOSMaster ($name) - CD nicht vorhanden" unless( defined($hash->{CD}));
 	
-	my $data;
-	my $retval = $socket->recv($data,8192);
-	
-	$socket->close();
-	
-	unless( defined $retval) { 
+	syswrite($hash->{CD}, "heos://player/get_players\r\n");
+    Log3 $name, 3, "HEOSMaster ($name) - Syswrite ausgeführt";
+}
+
+sub HEOSMaster_Read($) {
+
+    my $hash = shift;
+    my $name = $hash->{NAME};
+    
+    my $len;
+    my $buf;
+    
+    Log3 $name, 3, "HEOSMaster ($name) - ReadFn gestartet";
+
+    $len = sysread($hash->{CD},$buf,4096);
+    
+    if( !defined($len) || !$len ) {
+        Log 1, "Länge? !!!!!!!!!!";
+        return;
+    }
+    
+	unless( defined $buf) { 
         Log3 $name, 3, "HEOSMaster ($name) - Keine Daten empfangen";
         return undef; 
     }
     
-	Log3 $name, 3, "HEOSMaster ($name) - Daten: $data";
+	Log3 $name, 3, "HEOSMaster ($name) - Daten: $buf";
 }
+
+
 
 
 
