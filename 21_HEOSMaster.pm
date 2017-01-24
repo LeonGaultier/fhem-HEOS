@@ -42,14 +42,21 @@ use strict;
 use warnings;
 
 use JSON;
+use Net::Telnet;
 
 
-my $missingModulRemote;
-eval "use Net::Telnet;1" or $missingModulRemote .= "Net::Telnet ";
-use IO::Socket::INET;
+my $version = "0.1.17";
 
 
-my $version = "0.0.22";
+my %heosCmds = (
+    'enableEvents'      => 'system/register_for_change_events?enable=',
+    'getPlayers'        => 'player/get_players',
+    'getPlayerState'    => 'player/get_player_info?',
+    'setPlayState'      => 'player/set_play_state?',
+    'setMute'           => 'player/set_mute?',
+    'setVolume'         => 'player/set_volume?'
+);
+
 
 
 
@@ -58,10 +65,14 @@ sub HEOSMaster_Initialize($);
 sub HEOSMaster_Define($$);
 sub HEOSMaster_Undef($$);
 sub HEOSMaster_Set($@);
-sub HEOSMaster_Connect($);
-sub HEOSMaster_Disconnect($);
-sub HEOSMaster_send($);
+sub HEOSMaster_Open($);
+sub HEOSMaster_Close($);
 sub HEOSMaster_Read($);
+sub HEOSMaster_Write($@);
+sub HEOSMaster_Attr(@);
+sub HEOSMaster_firstRun($);
+sub HEOSMaster_ResponseProcessing($$);
+sub HEOSMaster_WriteReadings($$);
 
 
 
@@ -72,8 +83,9 @@ sub HEOSMaster_Initialize($) {
     
     # Provider
     $hash->{ReadFn}     = "HEOSMaster_Read";
-    #$hash->{WriteFn}    = "HEOSMaster_Read";
-    #$hash->{Clients}    = ":HEOSPlayer:";
+    $hash->{WriteFn}    = "HEOSMaster_Write";
+    $hash->{Clients}    = ":HEOSPlayer:";
+    $hash->{MatchList} = { "1:HEOSPlayer"   => '.*{"command":."player.*' };
 
       
     # Consumer
@@ -81,9 +93,9 @@ sub HEOSMaster_Initialize($) {
     #$hash->{GetFn}      = "HEOSMaster_Get";
     $hash->{DefFn}      = "HEOSMaster_Define";
     $hash->{UndefFn}    = "HEOSMaster_Undef";
-    #$hash->{AttrFn}     = "HEOSMaster_Attr";
-    #$hash->{AttrList}   = "disable:1 ".
-    #                      $readingFnAttributes;
+    $hash->{AttrFn}     = "HEOSMaster_Attr";
+    $hash->{AttrList}   = "disable:1 ".
+                          $readingFnAttributes;
 
 
     foreach my $d(sort keys %{$modules{HEOSMaster}{defptr}}) {
@@ -113,10 +125,20 @@ sub HEOSMaster_Define($$) {
     Log3 $name, 3, "HEOSMaster ($name) - defined with host $host";
 
     $attr{$name}{room} = "HEOS" if( !defined( $attr{$name}{room} ) );
-    readingsSingleUpdate($hash, 'state', 'Initialized', 1 );
-
-
-    $modules{HEOSMaster}{defptr}{$hash->{HOST}} = $hash;
+    
+    readingsBeginUpdate($hash);
+    readingsBulkUpdate($hash,'state','Initialized');
+    readingsBulkUpdate($hash,'enableEvents', 'off');
+    readingsEndUpdate($hash,1);
+    
+    
+    if( $init_done ) {
+    
+        InternalTimer( gettimeofday()+1, 'HEOSMaster_firstRun', $hash, 0 ) if( ($hash->{HOST}) );
+    } else {
+    
+        InternalTimer( gettimeofday()+15, 'HEOSMaster_firstRun', $hash, 0 ) if( ($hash->{HOST}) );
+    }
     
     return undef;
 }
@@ -128,9 +150,44 @@ sub HEOSMaster_Undef($$) {
     my $host = $hash->{HOST};
     my $name = $hash->{NAME};
     
-    
+    HEOSMaster_Close($hash);
     delete $modules{HEOSMaster}{defptr}{$hash->{HOST}};
     
+    return undef;
+}
+
+sub HEOSMaster_Attr(@) {
+
+    my ( $cmd, $name, $attrName, $attrVal ) = @_;
+    my $hash = $defs{$name};
+    
+    my $orig = $attrVal;
+
+    
+    if( $attrName eq "disable" ) {
+        if( $cmd eq "set" and $attrVal eq "1" ) {
+            readingsSingleUpdate ( $hash, "state", "disabled", 1 );
+            Log3 $name, 3, "HEOSMaster ($name) - disabled";
+        }
+
+        elsif( $cmd eq "del" ) {
+            readingsSingleUpdate ( $hash, "state", "active", 1 );
+            Log3 $name, 3, "HEOSMaster ($name) - enabled";
+        }
+    }
+    
+    if( $attrName eq "disabledForIntervals" ) {
+        if( $cmd eq "set" ) {
+            Log3 $name, 3, "HEOSMaster ($name) - enable disabledForIntervals";
+            readingsSingleUpdate ( $hash, "state", "Unknown", 1 );
+        }
+
+        elsif( $cmd eq "del" ) {
+            readingsSingleUpdate ( $hash, "state", "active", 1 );
+            Log3 $name, 3, "HEOSMaster ($name) - delete disabledForIntervals";
+        }
+    }
+
     return undef;
 }
 
@@ -139,20 +196,20 @@ sub HEOSMaster_Set($@) {
     my ($hash, $name, $cmd, @args) = @_;
     my ($arg, @params) = @args;
 
+    my $action;
     
-    if($cmd eq 'startConnect') {
-        return "usage: startConnect" if( @args != 0 );
+    if($cmd eq 'reopen') {
+        return "usage: reopen" if( @args != 0 );
 
-       HEOSMaster_Connect($hash);
+        HEOSMaster_Close($hash);
+        HEOSMaster_Open($hash) if( !$hash->{CD} or !defined($hash->{CD}) );
 
         return undef;
-        
-    } elsif($cmd eq 'stopConnect') {
-        return "usage: stopConnect" if( @args != 0 );
 
-        HEOSMaster_Disconnect($hash);
+    } elsif($cmd eq 'getPlayers') {
+        return "usage: getPlayers" if( @args != 0 );
 
-        return undef;   
+        $action = $cmd;
         
      } elsif($cmd eq 'send') {
         return "usage: send" if( @args != 0 );
@@ -163,30 +220,54 @@ sub HEOSMaster_Set($@) {
         
     } else {
         my  $list = ""; 
-        $list .= "startConnect:noArg stopConnect:noArg send:noArg";
+        $list .= "reopen:noArg getPlayers:noArg send:noArg";
         return "Unknown argument $cmd, choose one of $list";
     }
+    
+    HEOSMaster_Write($hash,$action,undef);
 }
 
-sub HEOSMaster_Connect($) {
+sub HEOSMaster_send($) {
+
+    my $hash    = shift;
+    
+    HEOSMaster_Write($hash,'getPlayerState',"pid=-512565195");
+}
+
+sub HEOSMaster_firstRun($) {
+
+    my $hash    = shift;
+    my $name    = $hash->{NAME};
+    
+    RemoveInternalTimer($hash);
+    
+    #if( !IsDisabled($name) ) {
+    
+        HEOSMaster_Open($hash);
+        if( $hash->{CD} ) {
+        
+            HEOSMaster_Write($hash,$heosCmds{enableEvents},'on');
+            Log3 $name, 3, "HEOSMaster ($name) - enable events at HEOS CLI";
+        
+        } else {
+        
+            Log3 $name, 3, "HEOSMaster ($name) - failed enable events at HEOS CLI";
+        }
+    #}
+}
+
+sub HEOSMaster_Open($) {
 
     my $hash    = shift;
     my $name    = $hash->{NAME};
     my $host    = $hash->{HOST};
     my $port    = 1255;
     my $timeout = 1;
-    my $msg;
+    
     
     Log3 $name, 3, "HEOSMaster ($name) - Baue Socket Verbindung auf";
     
-    
-    #my $socket = IO::Socket::INET->new(PeerAddr => $host,
-    #    PeerPort => $port,
-    #    Proto    => 'tcp',
-    #    Type     => SOCK_STREAM,
-    #    Timeout  => $timeout )
-    #    or return Log3 $name, 3, "HEOSMaster ($name) Couldn't connect to $host:$port";
-    
+
     my $socket = new Net::Telnet ( Host=>$host,
         Port => $port,
         Timeout=>$timeout,
@@ -200,11 +281,9 @@ sub HEOSMaster_Connect($) {
     readingsSingleUpdate($hash, 'state', 'connected', 1 );
     
     Log3 $name, 3, "HEOSMaster ($name) - Socket Connected";
-    
-    syswrite($hash->{CD}, "heos://system/register_for_change_events?enable=on\r\n") if( defined($hash->{CD}) );
 }
 
-sub HEOSMaster_Disconnect($) {
+sub HEOSMaster_Close($) {
 
     my $hash    = shift;
     my $name    = $hash->{NAME};
@@ -218,16 +297,23 @@ sub HEOSMaster_Disconnect($) {
     readingsSingleUpdate($hash, 'state', 'not connected', 1 );
 }
 
-sub HEOSMaster_send($) {
+sub HEOSMaster_Write($@) {
+
+    my ($hash,$heosCmd,$value)  = @_;
+    my $name                    = $hash->{NAME};
     
-    my $hash = shift;
-    my $name = $hash->{NAME};
-    my $buf;
+    my $string  = "heos://$heosCmds{$heosCmd}";
+    $string    .= "${value}" if(defined($value));
+    $string    .= "\r\n";
     
-    return  Log3 $name, 3, "HEOSMaster ($name) - CD nicht vorhanden" unless( defined($hash->{CD}));
-	
-	syswrite($hash->{CD}, "heos://player/get_players\r\n");
-    Log3 $name, 3, "HEOSMaster ($name) - Syswrite ausgeführt";
+    Log3 $name, 3, "HEOSMaster ($name) - WriteFn called";
+    
+    return Log3 $name, 3, "HEOSMaster ($name) - socket not connected"
+    unless($hash->{CD});
+
+    Log3 $name, 3, "HEOSMaster ($name) - $string";
+    syswrite($hash->{CD}, $string);
+    return undef;
 }
 
 sub HEOSMaster_Read($) {
@@ -240,7 +326,7 @@ sub HEOSMaster_Read($) {
     
     Log3 $name, 3, "HEOSMaster ($name) - ReadFn gestartet";
 
-    $len = sysread($hash->{CD},$buf,4096);
+    $len = sysread($hash->{CD},$buf,1024);
     
     if( !defined($len) || !$len ) {
         Log 1, "Länge? !!!!!!!!!!";
@@ -253,6 +339,84 @@ sub HEOSMaster_Read($) {
     }
     
 	Log3 $name, 3, "HEOSMaster ($name) - Daten: $buf";
+	HEOSMaster_ResponseProcessing($hash,$buf);
+}
+
+sub HEOSMaster_ResponseProcessing($$) {
+
+    my ($hash,$json)    = @_;
+    my $name            = $hash->{NAME};
+    
+    my $decode_json;
+    
+    
+    
+    
+    Log3 $name, 3, "HEOSMaster ($name) - JSON String: $json";
+
+
+    return Log3 $name, 3, "HEOSMaster ($name) - empty answer received"
+    unless( defined($json));
+    
+    $decode_json = decode_json($json);
+    
+    return Log3 $name, 3, "HEOSMaster ($name) - decode_json has no Hash"
+    unless(ref($decode_json) eq "HASH");
+
+
+    if( defined($decode_json->{heos}{result}) and defined($decode_json->{heos}{command}) ) {
+    
+        HEOSMaster_WriteReadings($hash,$decode_json);
+        Log3 $name, 3, "HEOSMaster ($name) - call Sub HEOSMaster_WriteReadings";
+    }
+    
+    if( $decode_json->{heos}{command} =~ /^player/ ) {
+        if( ref($decode_json->{payload}) eq "ARRAY" and scalar(@{$decode_json->{payload}}) > 0) {
+        
+            foreach my $payload (@{$decode_json->{payload}}) {
+            
+                $json  =    '{"pid": "';
+                $json .=    "$payload->{pid}";
+                $json .=    '","heos": {"command": "player/get_players"}}';
+
+                Dispatch($hash,$json,undef);
+                Log3 $name, 3, "HEOSMaster ($name) - call Dispatcher";
+
+            }
+        } elsif( defined($decode_json->{payload}{pid}) ) {
+    
+            Dispatch($hash,$json,undef);
+            Log3 $name, 3, "HEOSMaster ($name) - call Dispatcher";
+            
+        } elsif( $decode_json->{heos}{message} =~ /^pid=/ ) {
+        
+            Dispatch($hash,$json,undef);
+            Log3 $name, 3, "HEOSMaster ($name) - call Dispatcher";
+        
+        }
+    }
+    
+    Log3 $name, 3, "HEOSMaster ($name) - no Match for processing data";
+}
+
+sub HEOSMaster_WriteReadings($$) {
+
+    my ($hash,$decode_json) = @_;
+    my $name                = $hash->{NAME};
+    
+    
+    readingsBeginUpdate($hash);
+    readingsBulkUpdate( $hash, "lastCommand", $decode_json->{heos}{command} );
+    readingsBulkUpdate( $hash, "lastResult", $decode_json->{heos}{result} );
+    
+    if( ref($decode_json->{payload}) ne "ARRAY" ) {
+        readingsBulkUpdate( $hash, "lastPlayerId", $decode_json->{payload}{pid} );
+        readingsBulkUpdate( $hash, "lastPlayerName", $decode_json->{payload}{name} );
+    }
+    
+    readingsEndUpdate( $hash, 1 );
+    
+    return undef;
 }
 
 
