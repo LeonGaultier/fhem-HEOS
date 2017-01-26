@@ -45,16 +45,19 @@ use JSON;
 use Net::Telnet;
 
 
-my $version = "0.1.17";
+my $version = "0.1.28";
 
 
 my %heosCmds = (
-    'enableEvents'      => 'system/register_for_change_events?enable=',
-    'getPlayers'        => 'player/get_players',
-    'getPlayerState'    => 'player/get_player_info?',
-    'setPlayState'      => 'player/set_play_state?',
-    'setMute'           => 'player/set_mute?',
-    'setVolume'         => 'player/set_volume?'
+    'enableChangeEvents'        => 'system/register_for_change_events?enable=',
+    'getPlayers'                => 'player/get_players',
+    'getPlayerInfo'             => 'player/get_player_info?',
+    'getPlayerState'            => 'player/get_player_state?',
+    'setPlayState'              => 'player/set_play_state?',
+    'setMute'                   => 'player/set_mute?',
+    'setVolume'                 => 'player/set_volume?',
+    'getNowPlayingMedia'        => 'player/get_now_playing_media?',
+    'eventChangeVolume'                     => 'event/player_volume_changed'
 );
 
 
@@ -73,6 +76,8 @@ sub HEOSMaster_Attr(@);
 sub HEOSMaster_firstRun($);
 sub HEOSMaster_ResponseProcessing($$);
 sub HEOSMaster_WriteReadings($$);
+sub HEOSMaster_GetPlayers($);
+sub HEOSMaster_PreResponseProsessing($$);
 
 
 
@@ -85,7 +90,7 @@ sub HEOSMaster_Initialize($) {
     $hash->{ReadFn}     = "HEOSMaster_Read";
     $hash->{WriteFn}    = "HEOSMaster_Write";
     $hash->{Clients}    = ":HEOSPlayer:";
-    $hash->{MatchList} = { "1:HEOSPlayer"   => '.*{"command":."player.*' };
+    $hash->{MatchList} = { "1:HEOSPlayer"   => '.*{"command":."player.*|.*{"command":."event\/player.*' };
 
       
     # Consumer
@@ -134,7 +139,8 @@ sub HEOSMaster_Define($$) {
     
     if( $init_done ) {
     
-        InternalTimer( gettimeofday()+1, 'HEOSMaster_firstRun', $hash, 0 ) if( ($hash->{HOST}) );
+        HEOSMaster_firstRun($hash);
+        
     } else {
     
         InternalTimer( gettimeofday()+15, 'HEOSMaster_firstRun', $hash, 0 ) if( ($hash->{HOST}) );
@@ -197,6 +203,7 @@ sub HEOSMaster_Set($@) {
     my ($arg, @params) = @args;
 
     my $action;
+    my $heosCmd;
     
     if($cmd eq 'reopen') {
         return "usage: reopen" if( @args != 0 );
@@ -209,29 +216,37 @@ sub HEOSMaster_Set($@) {
     } elsif($cmd eq 'getPlayers') {
         return "usage: getPlayers" if( @args != 0 );
 
-        $action = $cmd;
+        HEOSMaster_GetPlayers($hash);
         
-     } elsif($cmd eq 'send') {
-        return "usage: send" if( @args != 0 );
+        return undef;
+        
+    } elsif($cmd eq 'enableChangeEvents') {
+        return "usage: enableChangeEvents" if( @args != 1 );
+
+        $heosCmd    = $cmd;
+        $action     = join(' ',@args);
+        
+    } elsif($cmd eq 'eventSend') {
+        return "usage: enableChangeEvents" if( @args != 0 );
 
         HEOSMaster_send($hash);
-
-        return undef;   
+        return undef;
         
     } else {
         my  $list = ""; 
-        $list .= "reopen:noArg getPlayers:noArg send:noArg";
+        $list .= "reopen:noArg getPlayers:noArg enableChangeEvents:on,off";
         return "Unknown argument $cmd, choose one of $list";
     }
     
-    HEOSMaster_Write($hash,$action,undef);
+    HEOSMaster_Write($hash,$heosCmd,$action);
 }
 
 sub HEOSMaster_send($) {
 
     my $hash    = shift;
     
-    HEOSMaster_Write($hash,'getPlayerState',"pid=-512565195");
+    HEOSMaster_Write($hash,'eventChangeVolume',undef);
+
 }
 
 sub HEOSMaster_firstRun($) {
@@ -239,21 +254,22 @@ sub HEOSMaster_firstRun($) {
     my $hash    = shift;
     my $name    = $hash->{NAME};
     
+    
     RemoveInternalTimer($hash);
     
-    #if( !IsDisabled($name) ) {
+    HEOSMaster_Open($hash) if( !IsDisabled($name) );
+}
+
+sub HEOSMaster_GetPlayers($) {
+
+    my $hash    = shift;
+    my $name    = $hash->{NAME};
     
-        HEOSMaster_Open($hash);
-        if( $hash->{CD} ) {
-        
-            HEOSMaster_Write($hash,$heosCmds{enableEvents},'on');
-            Log3 $name, 3, "HEOSMaster ($name) - enable events at HEOS CLI";
-        
-        } else {
-        
-            Log3 $name, 3, "HEOSMaster ($name) - failed enable events at HEOS CLI";
-        }
-    #}
+    
+    RemoveInternalTimer($hash);
+    
+    HEOSMaster_Write($hash,'getPlayers',undef);
+    Log3 $name, 3, "HEOSMaster ($name) - getPlayers";
 }
 
 sub HEOSMaster_Open($) {
@@ -281,6 +297,8 @@ sub HEOSMaster_Open($) {
     readingsSingleUpdate($hash, 'state', 'connected', 1 );
     
     Log3 $name, 3, "HEOSMaster ($name) - Socket Connected";
+    
+    HEOSMaster_GetPlayers($hash);
 }
 
 sub HEOSMaster_Close($) {
@@ -303,7 +321,7 @@ sub HEOSMaster_Write($@) {
     my $name                    = $hash->{NAME};
     
     my $string  = "heos://$heosCmds{$heosCmd}";
-    $string    .= "${value}" if(defined($value));
+    $string    .= "${value}" if(defined($value) or $value ne '&');
     $string    .= "\r\n";
     
     Log3 $name, 3, "HEOSMaster ($name) - WriteFn called";
@@ -326,7 +344,7 @@ sub HEOSMaster_Read($) {
     
     Log3 $name, 3, "HEOSMaster ($name) - ReadFn gestartet";
 
-    $len = sysread($hash->{CD},$buf,1024);
+    $len = sysread($hash->{CD},$buf,4096);
     
     if( !defined($len) || !$len ) {
         Log 1, "Länge? !!!!!!!!!!";
@@ -335,11 +353,58 @@ sub HEOSMaster_Read($) {
     
 	unless( defined $buf) { 
         Log3 $name, 3, "HEOSMaster ($name) - Keine Daten empfangen";
-        return undef; 
+        return; 
+    }
+    
+    if( $buf !~ m/^[\[{].*[}\]]$/ ) {
+        Log3 $name, 3, "HEOSMaster ($name) - invalid json detected. start preprocessing";
+        HEOSMaster_PreResponseProsessing($hash,$buf);
+        return;
     }
     
 	Log3 $name, 3, "HEOSMaster ($name) - Daten: $buf";
 	HEOSMaster_ResponseProcessing($hash,$buf);
+}
+
+sub HEOSMaster_PreResponseProsessing($$) {
+
+    my ($hash,$response)    = @_;
+    my $name                = $hash->{NAME};
+    
+    
+    Log3 $name, 3, "HEOSMaster ($name) - pre processing respone data";
+    
+    my $len = length($response);
+    my @letterArray = split("",$response);
+
+    my $letter  = "";
+    my $count   = 0;
+    my $marker  = 0;
+    my $json;
+
+    for(my $i = 0; $i < $len; $i++) {
+
+        $marker     = 1 if($count > 0);
+        $letter     = $letterArray[0];
+        $json      .= $letter;
+        
+        $count++ if($letter eq '{');
+        $count-- if($letter eq '}');
+
+
+
+        if( $count == 0 and $marker == 1) {
+     
+            HEOSMaster_ResponseProcessing($hash,$json);
+            $json = "";
+            $marker = 0;
+        }
+
+        shift(@letterArray);
+    }
+    
+    #my $rest = join(' ',@letterArray);      # currupted data, rest  array
+    #Log3 $name, 3, "HEOSMaster ($name) - found corrupt data in buffer: $rest" if( defined($rest) and ($rest) );
 }
 
 sub HEOSMaster_ResponseProcessing($$) {
@@ -349,28 +414,27 @@ sub HEOSMaster_ResponseProcessing($$) {
     
     my $decode_json;
     
-    
-    
-    
-    Log3 $name, 3, "HEOSMaster ($name) - JSON String: $json";
 
+    Log3 $name, 3, "HEOSMaster ($name) - JSON String: $json";
 
     return Log3 $name, 3, "HEOSMaster ($name) - empty answer received"
     unless( defined($json));
-    
+
+
+    Log3 $name, 3, "HEOSMaster ($name) - json detected: $json";
     $decode_json = decode_json($json);
     
     return Log3 $name, 3, "HEOSMaster ($name) - decode_json has no Hash"
     unless(ref($decode_json) eq "HASH");
 
 
-    if( defined($decode_json->{heos}{result}) and defined($decode_json->{heos}{command}) ) {
+    if( (defined($decode_json->{heos}{result}) and defined($decode_json->{heos}{command})) or ($decode_json->{heos}{command} =~ /^system/) ) {
     
         HEOSMaster_WriteReadings($hash,$decode_json);
         Log3 $name, 3, "HEOSMaster ($name) - call Sub HEOSMaster_WriteReadings";
     }
     
-    if( $decode_json->{heos}{command} =~ /^player/ ) {
+    if( $decode_json->{heos}{command} =~ /^player/ or $decode_json->{heos}{command} =~ /^event\/player/ ) {
         if( ref($decode_json->{payload}) eq "ARRAY" and scalar(@{$decode_json->{payload}}) > 0) {
         
             foreach my $payload (@{$decode_json->{payload}}) {
@@ -383,18 +447,23 @@ sub HEOSMaster_ResponseProcessing($$) {
                 Log3 $name, 3, "HEOSMaster ($name) - call Dispatcher";
 
             }
+            
+            return;
+            
         } elsif( defined($decode_json->{payload}{pid}) ) {
     
             Dispatch($hash,$json,undef);
             Log3 $name, 3, "HEOSMaster ($name) - call Dispatcher";
+            return;
             
         } elsif( $decode_json->{heos}{message} =~ /^pid=/ ) {
         
             Dispatch($hash,$json,undef);
             Log3 $name, 3, "HEOSMaster ($name) - call Dispatcher";
-        
+            return;
+            
         }
-    }
+    } 
     
     Log3 $name, 3, "HEOSMaster ($name) - no Match for processing data";
 }
@@ -403,9 +472,16 @@ sub HEOSMaster_WriteReadings($$) {
 
     my ($hash,$decode_json) = @_;
     my $name                = $hash->{NAME};
+    my $value;
     
     
     readingsBeginUpdate($hash);
+    if ( $decode_json->{heos}{command} =~ /register_for_change_events/ ) {
+        my @value     = split('=', $decode_json->{heos}{message});
+        $value        = $value[1];
+        readingsBulkUpdate( $hash, 'enableChangeEvents', "$value" );
+    }
+    
     readingsBulkUpdate( $hash, "lastCommand", $decode_json->{heos}{command} );
     readingsBulkUpdate( $hash, "lastResult", $decode_json->{heos}{result} );
     
