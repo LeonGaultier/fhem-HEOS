@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 
 
-my $version = "0.1.28";
+my $version = "0.1.30";
 
 
 
@@ -207,10 +207,10 @@ sub HEOSPlayer_Set($$@) {
 
         $heosCmd    = 'getPlayerInfo';
         
-    } elsif( $cmd eq 'getPlayerState' ) {
-        return "usage: getPlayerState" if( @args != 0 );
+    } elsif( $cmd eq 'getPlayState' ) {
+        return "usage: getPlayState" if( @args != 0 );
         
-        $heosCmd    = 'getPlayerState';
+        $heosCmd    = 'getPlayState';
         
     } elsif( $cmd eq 'getNowPlayingMedia' ) {
         return "usage: getNowPlayingMedia" if( @args != 0 );
@@ -248,11 +248,10 @@ sub HEOSPlayer_Set($$@) {
         $action     = "level=$args[0]";
 
     } else {
-        my  $list = "getPlayerInfo:noArg getPlayerState:noArg play:noArg stop:noArg pause:noArg mute:on,off volume:slider,0,5,100";
+        my  $list = "getPlayerInfo:noArg getPlayState:noArg getNowPlayingMedia:noArg play:noArg stop:noArg pause:noArg mute:on,off volume:slider,0,5,100";
         return "Unknown argument $cmd, choose one of $list";
     }
     
-    #IOWrite($hash,"$heosCmd","pid=$hash->{PID}&$action");
     
     $string     .= "&$action" if( defined($action));
     
@@ -269,8 +268,9 @@ sub HEOSPlayer_GetUpdate($) {
     
     RemoveInternalTimer($hash);
     
-    IOWrite($hash,'getPlayerState',"pid=$hash->{PID}");
     IOWrite($hash,'getPlayerInfo',"pid=$hash->{PID}");
+    IOWrite($hash,'getPlayState',"pid=$hash->{PID}");
+    IOWrite($hash,'getNowPlayingMedia',"pid=$hash->{PID}");
     
     return undef;
 }
@@ -358,15 +358,41 @@ sub HEOSPlayer_WriteReadings($$) {
     ############################
     #### Aufbereiten der Daten soweit nötig (bei Events zum Beispiel)
     
-    my ($reading,$value)    = HEOSPlayer_PreProcessingReadings($hash,$decode_json)
+    my ($string)    = HEOSPlayer_PreProcessingReadings($hash,$decode_json)
     if( $decode_json->{heos}{message} =~ /^pid=/ );
     
+    
+    Log3 $name, 3, "HEOSPlayer ($name) - String: $string";
     
     ############################
     #### schreiben der Readings
     
     readingsBeginUpdate($hash);
-    readingsBulkUpdate( $hash, $reading, $value ) if( defined($reading) and defined($value));
+    
+    ### Event Readings
+    if( defined($string) ) {
+        
+        Log3 $name, 3, "HEOSPlayer ($name) - response json string back from HEOSPlayer_PreProcessingReadings: $string";
+        
+        
+        my @valuestring = split( '@@@@', $string );
+        #my @valuestring = $string if( not defined($valuestring[0]));
+        my %buffer;
+        foreach( @valuestring ) {
+            my @values = split( '@@' , $_ );
+            $buffer{$values[0]} = $values[1];
+        }
+        
+        my $t;
+        my $v;
+        while( ( $t, $v ) = each %buffer ) {
+            if( defined( $v ) ) {
+            
+                readingsBulkUpdate( $hash, $t, $v );
+            }
+        }
+    }
+    
     
     ### PlayerInfos
     readingsBulkUpdate( $hash, 'name', $decode_json->{payload}{name} );
@@ -405,34 +431,45 @@ sub HEOSPlayer_PreProcessingReadings($$) {
     
     my $reading;
     my $value;
+    my $string  = '';
     
     
     Log3 $name, 3, "HEOSPlayer ($name) - preprocessing readings";
     
     if ( $decode_json->{heos}{command} =~ /play_state/ ) {
     
-        my @value     = split('&', $decode_json->{heos}{message});
-        $value        = substr($value[1],6);
+        my @value   = split('&', $decode_json->{heos}{message});
+        $value      = '@@'.substr($value[1],6);
         $reading    = 'state';
+        
+        $string .= "$reading${value}";
         
     } elsif ( $decode_json->{heos}{command} =~ /set_volume/ ) {
     
-        my @value     = split('&', $decode_json->{heos}{message});
-        $value        = substr($value[1],6);
+        my @value   = split('&', $decode_json->{heos}{message});
+        $value      = '@@'.substr($value[1],6);
         $reading    = 'volume';
+        
+        $string .= "$reading${value}";
         
     } elsif ( $decode_json->{heos}{command} =~ /volume_changed/ ) {
     
-        my @value     = split('&', $decode_json->{heos}{message});
-        $value        = substr($value[1],6);
-        $reading    = 'volume';
+        my @value   =   split('&', $decode_json->{heos}{message});
+        $string     .=  'volume';
+        $string     .=  '@@'.substr($value[1],6);
+        $string     .=  '@@@@mute';
+        $string     .=  '@@'.substr($value[2],5);
+        
+        $string .= "$reading${value}";
         
     } else {
     
         Log3 $name, 3, "HEOSPlayer ($name) - no match found";
     }
     
-    return($reading,$value);
+    
+    Log3 $name, 3, "HEOSPlayer ($name) - no match found";
+    return $string;
 }
 
 

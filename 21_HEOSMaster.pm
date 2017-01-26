@@ -45,14 +45,14 @@ use JSON;
 use Net::Telnet;
 
 
-my $version = "0.1.28";
+my $version = "0.1.30";
 
 
 my %heosCmds = (
     'enableChangeEvents'        => 'system/register_for_change_events?enable=',
     'getPlayers'                => 'player/get_players',
     'getPlayerInfo'             => 'player/get_player_info?',
-    'getPlayerState'            => 'player/get_player_state?',
+    'getPlayState'              => 'player/get_play_state?',
     'setPlayState'              => 'player/set_play_state?',
     'setMute'                   => 'player/set_mute?',
     'setVolume'                 => 'player/set_volume?',
@@ -133,7 +133,7 @@ sub HEOSMaster_Define($$) {
     
     readingsBeginUpdate($hash);
     readingsBulkUpdate($hash,'state','Initialized');
-    readingsBulkUpdate($hash,'enableEvents', 'off');
+    readingsBulkUpdate($hash,'enableChangeEvents', 'off');
     readingsEndUpdate($hash,1);
     
     
@@ -227,7 +227,7 @@ sub HEOSMaster_Set($@) {
         $action     = join(' ',@args);
         
     } elsif($cmd eq 'eventSend') {
-        return "usage: enableChangeEvents" if( @args != 0 );
+        return "usage: eventSend" if( @args != 0 );
 
         HEOSMaster_send($hash);
         return undef;
