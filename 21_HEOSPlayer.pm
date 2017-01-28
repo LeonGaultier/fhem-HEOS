@@ -292,7 +292,11 @@ sub HEOSPlayer_Parse($$) {
     
         if( my $hash    = $modules{HEOSPlayer}{defptr}{$code} ) {
             my $name    = $hash->{NAME};
-            HEOSPlayer_GetUpdate($hash);
+            
+            IOWrite($hash,'getPlayerInfo',"pid=$hash->{PID}");
+            IOWrite($hash,'getPlayState',"pid=$hash->{PID}");
+            IOWrite($hash,'getNowPlayingMedia',"pid=$hash->{PID}");
+            
             Log3 $name, 4, "HEOSPlayer ($name) - find logical device: $hash->{NAME}";
         
             return $hash->{NAME};
