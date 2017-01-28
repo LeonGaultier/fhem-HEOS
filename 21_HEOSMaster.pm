@@ -45,7 +45,7 @@ use JSON;
 use Net::Telnet;
 
 
-my $version = "0.1.35";
+my $version = "0.1.36";
 
 
 my %heosCmds = (
@@ -294,8 +294,13 @@ sub HEOSMaster_Write($@) {
     my ($hash,$heosCmd,$value)  = @_;
     my $name                    = $hash->{NAME};
     
+    
     my $string  = "heos://$heosCmds{$heosCmd}";
-    $string    .= "${value}" if(defined($value) or $value ne '&');
+    
+    if( defined($value) ) {
+        $string    .= "${value}" if( $value ne '&' );
+    }
+    
     $string    .= "\r\n";
     
     Log3 $name, 4, "HEOSMaster ($name) - WriteFn called";
