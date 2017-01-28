@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 
 
-my $version = "0.1.33";
+my $version = "0.1.35";
 
 
 
@@ -362,7 +362,7 @@ sub HEOSPlayer_WriteReadings($$) {
     readingsBeginUpdate($hash);
     
     ### Event Readings
-    if( defined($readingsHash) ) {
+    if( ref($readingsHash) eq "HASH" ) {
         
         Log3 $name, 4, "HEOSPlayer ($name) - response json Hash back from HEOSPlayer_PreProcessingReadings";
         

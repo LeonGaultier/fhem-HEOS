@@ -45,7 +45,7 @@ use JSON;
 use Net::Telnet;
 
 
-my $version = "0.1.33";
+my $version = "0.1.35";
 
 
 my %heosCmds = (
@@ -160,7 +160,7 @@ sub HEOSMaster_Undef($$) {
     HEOSMaster_Close($hash);
     delete $modules{HEOSMaster}{defptr}{$hash->{HOST}};
     
-    Log3 $name, 3, "HEOSPlayer ($name) - device $name deleted;
+    Log3 $name, 3, "HEOSPlayer ($name) - device $name deleted";
     
     return undef;
 }
@@ -243,14 +243,6 @@ sub HEOSMaster_Set($@) {
     }
     
     HEOSMaster_Write($hash,$heosCmd,$action);
-}
-
-sub HEOSMaster_send($) {
-
-    my $hash    = shift;
-    
-    HEOSMaster_Write($hash,'eventChangeVolume',undef);
-
 }
 
 sub HEOSMaster_Open($) {
@@ -513,6 +505,16 @@ sub HEOSMaster_EnableChangeEvents($) {
     
     HEOSMaster_Write($hash,'enableChangeEvents','on');
     Log3 $name, 3, "HEOSMaster ($name) - set enableChangeEvents on";
+}
+
+################
+### Nur für mich um dem Emulator ein Event ab zu jagen
+sub HEOSMaster_send($) {
+
+    my $hash    = shift;
+    
+    HEOSMaster_Write($hash,'eventChangeVolume',undef);
+
 }
 
 
