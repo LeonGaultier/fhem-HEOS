@@ -2,7 +2,7 @@
 # 
 # Developed with Kate
 #
-#  (c) 2016-2017 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
+#  (c) 2017 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
 #  All rights reserved
 #
 #  This script is free software; you can redistribute it and/or modify
@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 
 
-my $version = "0.1.42";
+my $version = "0.1.43";
 
 
 

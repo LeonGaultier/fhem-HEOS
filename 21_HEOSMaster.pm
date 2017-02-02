@@ -45,7 +45,7 @@ use JSON;
 use Net::Telnet;
 
 
-my $version = "0.1.42";
+my $version = "0.1.43";
 
 
 my %heosCmds = (
@@ -215,7 +215,6 @@ sub HEOSMaster_Set($@) {
 
     my ($hash, $name, $cmd, @args) = @_;
     my ($arg, @params)  = @args;
-    my $name            = $hash->{NAME};
 
     my $action;
     my $heosCmd;
