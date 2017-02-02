@@ -45,17 +45,25 @@ use JSON;
 use Net::Telnet;
 
 
-my $version = "0.1.36";
+my $version = "0.1.42";
 
 
 my %heosCmds = (
     'enableChangeEvents'        => 'system/register_for_change_events?enable=',
+    'checkAccount'              => 'system/check_account',
+    'signAccountIn'             => 'system/sign_in?',
+    'signAccountOut'            => 'system/sign_out',
+    'reboot'                    => 'system/reboot',
     'getPlayers'                => 'player/get_players',
     'getPlayerInfo'             => 'player/get_player_info?',
     'getPlayState'              => 'player/get_play_state?',
+    'getPlayMode'               => 'player/get_play_mode?',
     'setPlayState'              => 'player/set_play_state?',
+    'setPlayMode'               => 'player/set_play_mode?',
     'setMute'                   => 'player/set_mute?',
     'setVolume'                 => 'player/set_volume?',
+    'volumeUp'                  => 'player/volume_up?',
+    'volumeDown'                => 'player/volume_down?',
     'getNowPlayingMedia'        => 'player/get_now_playing_media?',
     'eventChangeVolume'                     => 'event/player_volume_changed'
 );
@@ -79,6 +87,8 @@ sub HEOSMaster_WriteReadings($$);
 sub HEOSMaster_PreResponseProsessing($$);
 sub HEOSMaster_GetPlayers($);
 sub HEOSMaster_EnableChangeEvents($);
+sub HEOSMaster_PreProcessingReadings($$);
+sub HEOSMaster_ReOpen($);
 
 
 
@@ -91,9 +101,9 @@ sub HEOSMaster_Initialize($) {
     $hash->{ReadFn}     = "HEOSMaster_Read";
     $hash->{WriteFn}    = "HEOSMaster_Write";
     $hash->{Clients}    = ":HEOSPlayer:";
-    $hash->{MatchList} = { "1:HEOSPlayer"   => '.*{"command":."player.*|.*{"command":."event\/player.*' };
+    $hash->{MatchList} = { "1:HEOSPlayer"   => '.*{"command":."player.*|.*{"command":."event\/player.*|.*{"command":."event\/repeat_mode_changed.*|.*{"command":."event\/shuffle_mode_changed.*' };
 
-      
+
     # Consumer
     $hash->{SetFn}      = "HEOSMaster_Set";
     #$hash->{GetFn}      = "HEOSMaster_Get";
@@ -101,6 +111,7 @@ sub HEOSMaster_Initialize($) {
     $hash->{UndefFn}    = "HEOSMaster_Undef";
     $hash->{AttrFn}     = "HEOSMaster_Attr";
     $hash->{AttrList}   = "disable:1 ".
+                          "heosUsername ".
                           $readingFnAttributes;
 
 
@@ -203,7 +214,8 @@ sub HEOSMaster_Attr(@) {
 sub HEOSMaster_Set($@) {
 
     my ($hash, $name, $cmd, @args) = @_;
-    my ($arg, @params) = @args;
+    my ($arg, @params)  = @args;
+    my $name            = $hash->{NAME};
 
     my $action;
     my $heosCmd;
@@ -211,8 +223,7 @@ sub HEOSMaster_Set($@) {
     if($cmd eq 'reopen') {
         return "usage: reopen" if( @args != 0 );
 
-        HEOSMaster_Close($hash);
-        HEOSMaster_Open($hash) if( !$hash->{CD} or !defined($hash->{CD}) );
+        HEOSMaster_ReOpen($hash);
 
         return undef;
 
@@ -222,23 +233,48 @@ sub HEOSMaster_Set($@) {
         $heosCmd    = 'getPlayers';
         $action     = undef;
         
-        return undef;
-        
     } elsif($cmd eq 'enableChangeEvents') {
         return "usage: enableChangeEvents" if( @args != 1 );
 
         $heosCmd    = $cmd;
         $action     = $args[0];
         
-    } elsif($cmd eq 'eventSend') {
-        return "usage: eventSend" if( @args != 0 );
+    } elsif($cmd eq 'checkAccount') {
+        return "usage: checkAccount" if( @args != 0 );
 
-        HEOSMaster_send($hash);
-        return undef;
+        $heosCmd    = $cmd;
+        $action     = undef;
         
+    } elsif($cmd eq 'signAccount') {
+        return "usage: signAccountIn" if( @args != 1 );
+
+        $heosCmd    = $cmd . $args[0];
+        $action     = 'un='. AttrVal($name,'heosUsername',0) . '&pw=' . HEOSMaster_ReadPassword($hash) if($args[0] eq 'In');
+    
+    } elsif($cmd eq 'password') {
+        return "usage: password" if( @args != 1 );
+
+        return HEOSMaster_StorePassword( $hash, $args[0] );
+        
+    } elsif($cmd eq 'reboot') {
+        return "usage: reboot" if( @args != 0 );
+
+        return HEOSMaster_StorePassword( $hash, $args[0] );
+        
+        
+    ###################################################
+    ### Dieser Menüpunkt ist nur zum testen
+    } elsif($cmd eq 'eventSend') {
+            return "usage: eventSend" if( @args != 0 );
+
+            HEOSMaster_send($hash);
+            return undef;
+    ###################################################
+    
+            
     } else {
         my  $list = ""; 
-        $list .= "reopen:noArg getPlayers:noArg enableChangeEvents:on,off";
+        $list .= "reopen:noArg getPlayers:noArg enableChangeEvents:on,off checkAccount:noArg signAccount:In,Out password reboot";
         return "Unknown argument $cmd, choose one of $list";
     }
     
@@ -289,6 +325,16 @@ sub HEOSMaster_Close($) {
     readingsSingleUpdate($hash, 'state', 'not connected', 1 );
 }
 
+sub HEOSMaster_ReOpen($) {
+
+    my $hash    = shift;
+    my $name    = $hash->{NAME};
+    
+    
+    HEOSMaster_Close($hash);
+    HEOSMaster_Open($hash) if( !$hash->{CD} or !defined($hash->{CD}) );
+}
+
 sub HEOSMaster_Write($@) {
 
     my ($hash,$heosCmd,$value)  = @_;
@@ -335,14 +381,8 @@ sub HEOSMaster_Read($) {
         return; 
     }
     
-    if( $buf !~ m/^[\[{].*[}\]]$/ ) {
-        Log3 $name, 4, "HEOSMaster ($name) - invalid json detected. start preprocessing";
-        HEOSMaster_PreResponseProsessing($hash,$buf);
-        return;
-    }
-    
-	Log3 $name, 5, "HEOSMaster ($name) - Daten: $buf";
-	HEOSMaster_ResponseProcessing($hash,$buf);
+    Log3 $name, 4, "HEOSMaster ($name) - received buffer data, start preprocessing";
+    HEOSMaster_PreResponseProsessing($hash,$buf);
 }
 
 sub HEOSMaster_PreResponseProsessing($$) {
@@ -351,7 +391,7 @@ sub HEOSMaster_PreResponseProsessing($$) {
     my $name                = $hash->{NAME};
     
     
-    Log3 $name, 4, "HEOSMaster ($name) - pre processing respone data";
+    Log3 $name, 4, "HEOSMaster ($name) - pre processing response data";
     
     my $len = length($response);
     my @letterArray = split("",$response);
@@ -411,9 +451,10 @@ sub HEOSMaster_ResponseProcessing($$) {
     
         HEOSMaster_WriteReadings($hash,$decode_json);
         Log3 $name, 4, "HEOSMaster ($name) - call Sub HEOSMaster_WriteReadings";
+
     }
     
-    if( $decode_json->{heos}{command} =~ /^player/ or $decode_json->{heos}{command} =~ /^event\/player/ ) {
+    if( $decode_json->{heos}{command} =~ /^player/ or $decode_json->{heos}{command} =~ /^event\/player/ or $decode_json->{heos}{command} =~ /^event\/repeat_mode_changed/ or $decode_json->{heos}{command} =~ /^event\/shuffle_mode_changed/ ) {
         if( ref($decode_json->{payload}) eq "ARRAY" and scalar(@{$decode_json->{payload}}) > 0) {
         
             foreach my $payload (@{$decode_json->{payload}}) {
@@ -454,13 +495,37 @@ sub HEOSMaster_WriteReadings($$) {
     my $value;
     
     
-    readingsBeginUpdate($hash);
-    if ( $decode_json->{heos}{command} =~ /register_for_change_events/ ) {
-        my @value     = split('=', $decode_json->{heos}{message});
-        $value        = $value[1];
-        readingsBulkUpdate( $hash, 'enableChangeEvents', "$value" );
-    }
+    ############################
+    #### Aufbereiten der Daten soweit nötig
     
+    my $readingsHash    = HEOSMaster_PreProcessingReadings($hash,$decode_json)
+    if( $decode_json->{heos}{command} eq 'system/register_for_change_events'
+        or $decode_json->{heos}{command} eq 'system/check_account'
+        or $decode_json->{heos}{command} eq 'system/sign_in'
+        or $decode_json->{heos}{command} eq 'system/sign_out' );
+    
+    
+    ############################
+    #### schreiben der Readings
+    
+    readingsBeginUpdate($hash);
+    
+    ### Event Readings
+    if( ref($readingsHash) eq "HASH" ) {
+        
+        Log3 $name, 4, "HEOSMaster ($name) - response json Hash back from HEOSMaster_PreProcessingReadings";
+        
+        my $t;
+        my $v;
+        while( ( $t, $v ) = each $readingsHash ) {
+            if( defined( $v ) ) {
+            
+                readingsBulkUpdate( $hash, $t, $v );
+            }
+        }
+    }
+
+
     readingsBulkUpdate( $hash, "lastCommand", $decode_json->{heos}{command} );
     readingsBulkUpdate( $hash, "lastResult", $decode_json->{heos}{result} );
     
@@ -476,6 +541,45 @@ sub HEOSMaster_WriteReadings($$) {
 
 ###################
 ### my little Helpers
+
+sub HEOSMaster_PreProcessingReadings($$) {
+
+    my ($hash,$decode_json)     = @_;
+    my $name                    = $hash->{NAME};
+    
+    my $reading;
+    my %buffer;
+
+
+    Log3 $name, 4, "HEOSMaster ($name) - preprocessing readings";
+    
+    
+    if ( $decode_json->{heos}{command} eq 'system/register_for_change_events' ) {
+        
+        my @value     = split('=', $decode_json->{heos}{message});
+        $buffer{'enableChangeEvents'}   = $value[1];
+        
+    } elsif ( $decode_json->{heos}{command} eq 'system/check_account' or $decode_json->{heos}{command} eq 'system/sign_in' ) {
+        
+        my @value               = split('&', $decode_json->{heos}{message});
+        if( $decode_json->{heos}{message} eq 'signed_out' ) {
+        
+            $buffer{'heosAccount'}  = $value[0];
+            
+        } else {
+
+            $buffer{'heosAccount'}  = $value[0] . ' as ' . substr($value[1],3);
+        }
+        
+    } else {
+    
+        Log3 $name, 3, "HEOSMaster ($name) - no match found";
+        return undef;
+    }
+    
+    Log3 $name, 4, "HEOSMaster ($name) - Match found for decode_json";
+    return \%buffer;
+}
 
 sub HEOSMaster_firstRun($) {
 
@@ -509,8 +613,83 @@ sub HEOSMaster_EnableChangeEvents($) {
     RemoveInternalTimer($hash);
     
     HEOSMaster_Write($hash,'enableChangeEvents','on');
-    Log3 $name, 3, "HEOSMaster ($name) - set enableChangeEvents on";
+    Log3 $name, 4, "HEOSMaster ($name) - set enableChangeEvents on";
 }
+
+sub HEOSMaster_StorePassword($$) {
+
+    my ($hash, $password) = @_;     
+    my $index = $hash->{TYPE}."_".$hash->{NAME}."_passwd";
+    my $key = getUniqueId().$index;
+    my $enc_pwd = "";
+    
+    
+    if(eval "use Digest::MD5;1") {
+    
+        $key = Digest::MD5::md5_hex(unpack "H*", $key);
+        $key .= Digest::MD5::md5_hex($key);
+    }
+    
+    for my $char (split //, $password) {
+    
+        my $encode=chop($key);
+        $enc_pwd.=sprintf("%.2x",ord($char)^ord($encode));
+        $key=$encode.$key;
+    }
+    
+    my $err = setKeyValue($index, $enc_pwd);
+    return "error while saving the password - $err" if(defined($err));
+    
+    return "password successfully saved";
+}
+   
+sub HEOSMaster_ReadPassword($) {
+
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
+    my $index = $hash->{TYPE}."_".$hash->{NAME}."_passwd";
+    my $key = getUniqueId().$index;
+    my ($password, $err);
+
+   
+    Log3 $name, 4, "HEOSMaster ($name) - Read FritzBox password from file";
+
+    ($err, $password) = getKeyValue($index);
+
+    if ( defined($err) ) {
+
+        Log3 $name, 4, "HEOSMaster ($name) - unable to read FritzBox password from file: $err";
+        return undef;
+    }  
+    
+    if ( defined($password) ) {
+
+        if ( eval "use Digest::MD5;1" ) {
+
+            $key = Digest::MD5::md5_hex(unpack "H*", $key);
+            $key .= Digest::MD5::md5_hex($key);
+        }
+
+        my $dec_pwd = '';
+     
+        for my $char (map { pack('C', hex($_)) } ($password =~ /(..)/g)) {
+      
+            my $decode=chop($key);
+            $dec_pwd.=chr(ord($char)^ord($decode));
+            $key=$decode.$key;
+        }
+     
+        return $dec_pwd;
+        
+    } else {
+    
+      Log3 $name, 4, "HEOSMaster ($name) - No password in file";
+      return undef;
+    }
+}
+
+
+
 
 ################
 ### Nur für mich um dem Emulator ein Event ab zu jagen
