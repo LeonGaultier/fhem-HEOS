@@ -380,7 +380,7 @@ sub HEOSMaster_Read($) {
         return; 
     }
     
-    Log3 $name, 4, "HEOSMaster ($name) - received buffer data, start preprocessing";
+    Log3 $name, 3, "HEOSMaster ($name) - received buffer data, start preprocessing: $buf";
     HEOSMaster_PreResponseProsessing($hash,$buf);
 }
 
@@ -433,13 +433,13 @@ sub HEOSMaster_ResponseProcessing($$) {
     my $decode_json;
     
 
-    Log3 $name, 5, "HEOSMaster ($name) - JSON String: $json";
+    Log3 $name, 3, "HEOSMaster ($name) - JSON String: $json";
 
     return Log3 $name, 3, "HEOSMaster ($name) - empty answer received"
     unless( defined($json));
 
 
-    Log3 $name, 5, "HEOSMaster ($name) - json detected: $json";
+    Log3 $name, 3, "HEOSMaster ($name) - json detected: $json";
     $decode_json = decode_json($json);
     
     return Log3 $name, 3, "HEOSMaster ($name) - decode_json has no Hash"
