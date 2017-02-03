@@ -34,7 +34,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
 
-my $version = "0.1.44";
+my $version = "0.1.45";
 
 
 
@@ -255,6 +255,10 @@ sub HEOSPlayer_Set($$@) {
         } elsif($args[0] eq 'one') {
         
             $rvalue     = 'on_one';
+            
+        } else {
+        
+            $rvalue     = $args[0];
         }
         
         $action     = "repeat=$rvalue&shuffle=" . ReadingsVal($name,'shuffle','off');

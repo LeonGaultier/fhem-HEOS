@@ -42,10 +42,11 @@ use strict;
 use warnings;
 
 use JSON qw(decode_json);
+use Encode qw(encode_utf8);
 use Net::Telnet;
 
 
-my $version = "0.1.44";
+my $version = "0.1.45";
 
 
 my %heosCmds = (
@@ -380,7 +381,7 @@ sub HEOSMaster_Read($) {
         return; 
     }
     
-    Log3 $name, 4, "HEOSMaster ($name) - received buffer data, start preprocessing: $buf";
+    Log3 $name, 5, "HEOSMaster ($name) - received buffer data, start preprocessing: $buf";
     HEOSMaster_PreResponseProsessing($hash,$buf);
 }
 
@@ -433,14 +434,14 @@ sub HEOSMaster_ResponseProcessing($$) {
     my $decode_json;
     
 
-    Log3 $name, 3, "HEOSMaster ($name) - JSON String: $json";
+    Log3 $name, 5, "HEOSMaster ($name) - JSON String: $json";
 
     return Log3 $name, 3, "HEOSMaster ($name) - empty answer received"
     unless( defined($json));
 
 
-    Log3 $name, 4, "HEOSMaster ($name) - json detected: $json";
-    $decode_json = decode_json($json);
+    Log3 $name, 4, "HEOSMaster ($name) - JSON detected!";
+    $decode_json = decode_json(encode_utf8($json));
     
     return Log3 $name, 3, "HEOSMaster ($name) - decode_json has no Hash"
     unless(ref($decode_json) eq "HASH");
