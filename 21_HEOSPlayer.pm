@@ -30,10 +30,11 @@ package main;
 
 use strict;
 use warnings;
-use JSON;
+use JSON qw(decode_json);
+use Encode qw(encode_utf8);
 
 
-my $version = "0.1.43";
+my $version = "0.1.44";
 
 
 
@@ -338,7 +339,7 @@ sub HEOSPlayer_Parse($$) {
     my $decode_json;
     
     
-    $decode_json    = decode_json($json);
+    $decode_json    = decode_json(encode_utf8($json));
 
     Log3 $name, 4, "HEOSPlayer ($name) - ParseFn wurde aufgerufen";
 
