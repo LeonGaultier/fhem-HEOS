@@ -40,36 +40,33 @@ my $version = "0.1.47";
 
 
 # Declare functions
-sub HEOSPlayer_Initialize($);
-sub HEOSPlayer_Define($$);
-sub HEOSPlayer_Undef($$);
-sub HEOSPlayer_Attr(@);
-sub HEOSPlayer_Parse($$);
-sub HEOSPlayer_WriteReadings($$);
-sub HEOSPlayer_Set($$@);
-sub HEOSPlayer_PreProcessingReadings($$);
-sub HEOSPlayer_GetPlayerInfo($);
-sub HEOSPlayer_GetPlayState($);
-sub HEOSPlayer_GetNowPlayingMedia($);
-sub HEOSPlayer_GetPlayMode($);
-sub HEOSPlayer_GetVolume($);
+sub HEOSGroup_Initialize($);
+sub HEOSGroup_Define($$);
+sub HEOSGroup_Undef($$);
+sub HEOSGroup_Attr(@);
+sub HEOSGroup_Parse($$);
+sub HEOSGroup_WriteReadings($$);
+sub HEOSGroup_Set($$@);
+sub HEOSGroup_PreProcessingReadings($$);
+sub HEOSGroup_GetGroupInfo($);
+sub HEOSGroup_GetGroupVolume($);
 
 
 
 
 
-sub HEOSPlayer_Initialize($) {
+sub HEOSGroup_Initialize($) {
 
     my ($hash) = @_;
 
-    $hash->{Match}          = '.*{"command":."player.*|.*{"command":."event/player.*|.*{"command":."event\/repeat_mode_changed.*|.*{"command":."event\/shuffle_mode_changed.*';
+    $hash->{Match}          = '.*{"command":."group.*|.*{"command":."event/group.*';
     
     # Provider
-    $hash->{SetFn}          = "HEOSPlayer_Set";
-    $hash->{DefFn}          = "HEOSPlayer_Define";
-    $hash->{UndefFn}        = "HEOSPlayer_Undef";
-    $hash->{AttrFn}         = "HEOSPlayer_Attr";
-    $hash->{ParseFn}        = "HEOSPlayer_Parse";
+    $hash->{SetFn}          = "HEOSGroup_Set";
+    $hash->{DefFn}          = "HEOSGroup_Define";
+    $hash->{UndefFn}        = "HEOSGroup_Undef";
+    $hash->{AttrFn}         = "HEOSGroup_Attr";
+    $hash->{ParseFn}        = "HEOSGroup_Parse";
     
     $hash->{AttrList}       = "IODev ".
                               "disable:1 ".
@@ -78,13 +75,13 @@ sub HEOSPlayer_Initialize($) {
 
 
 
-    foreach my $d(sort keys %{$modules{HEOSPlayer}{defptr}}) {
-        my $hash = $modules{HEOSPlayer}{defptr}{$d};
+    foreach my $d(sort keys %{$modules{HEOSGroup}{defptr}}) {
+        my $hash = $modules{HEOSGroup}{defptr}{$d};
         $hash->{VERSION} 	= $version;
     }
 }
 
-sub HEOSPlayer_Define($$) {
+sub HEOSGroup_Define($$) {
 
     my ( $hash, $def ) = @_;
     
@@ -103,11 +100,11 @@ sub HEOSPlayer_Define($$) {
         $i++;
     }
 
-    return "too few parameters: define <name> HEOSPlayer <pid>" if( @a < 2 );
+    return "too few parameters: define <name> HEOSGroup <gid>" if( @a < 2 );
 
-    my ($name,$pid)     = @a;
+    my ($name,$gid)     = @a;
 
-    $hash->{PID}        = $pid;
+    $hash->{GID}        = $gid;
     $hash->{VERSION}    = $version;
     
     
@@ -115,43 +112,37 @@ sub HEOSPlayer_Define($$) {
     
     if(defined($hash->{IODev}->{NAME})) {
     
-        Log3 $name, 3, "HEOSPlayer ($name) - I/O device is " . $hash->{IODev}->{NAME};
+        Log3 $name, 3, "HEOSGroup ($name) - I/O device is " . $hash->{IODev}->{NAME};
     } else {
     
-        Log3 $name, 1, "HEOSPlayer ($name) - no I/O device";
+        Log3 $name, 1, "HEOSGroup ($name) - no I/O device";
     }
     
     $iodev = $hash->{IODev}->{NAME};
 
     
-    my $code = abs($pid);
+    my $code = abs($gid);
     $code = $iodev."-".$code if( defined($iodev) );
-    my $d = $modules{HEOSPlayer}{defptr}{$code};
-    return "HEOSPlayer device $hash->{pid} on HEOSMaster $iodev already defined as $d->{NAME}."
+    my $d = $modules{HEOSGroup}{defptr}{$code};
+    return "HEOSGroup device $hash->{GID} on HEOSMaster $iodev already defined as $d->{NAME}."
         if( defined($d)
             && $d->{IODev} == $hash->{IODev}
             && $d->{NAME} ne $name );
   
   
-    Log3 $name, 3, "HEOSPlayer ($name) - defined with Code: $code";
+    Log3 $name, 3, "HEOSGroup ($name) - defined with Code: $code";
 
     $attr{$name}{room}          = "HEOS" if( !defined( $attr{$name}{room} ) );
     $attr{$name}{devStateIcon}  = "on:10px-kreis-gruen off:10px-kreis-rot" if( !defined( $attr{$name}{devStateIcon} ) );
     
     
-    if( $init_done ) {
-        InternalTimer( gettimeofday()+int(rand(2)), "HEOSPlayer_GetPlayerInfo", $hash, 0 );
-        InternalTimer( gettimeofday()+int(rand(4)), "HEOSPlayer_GetPlayState", $hash, 0 );
-        InternalTimer( gettimeofday()+int(rand(6)), "HEOSPlayer_GetNowPlayingMedia", $hash, 0 );
-        InternalTimer( gettimeofday()+int(rand(8)), "HEOSPlayer_GetPlayMode", $hash, 0 );
-        InternalTimer( gettimeofday()+int(rand(10)), "HEOSPlayer_GetVolume", $hash, 0 );
-   } else {
-        InternalTimer( gettimeofday()+15+int(rand(2)), "HEOSPlayer_GetPlayerInfo", $hash, 0 );
-        InternalTimer( gettimeofday()+15+int(rand(4)), "HEOSPlayer_GetPlayState", $hash, 0 );
-        InternalTimer( gettimeofday()+15+int(rand(6)), "HEOSPlayer_GetNowPlayingMedia", $hash, 0 );
-        InternalTimer( gettimeofday()+15+int(rand(8)), "HEOSPlayer_GetPlayMode", $hash, 0 );
-        InternalTimer( gettimeofday()+15+int(rand(10)), "HEOSPlayer_GetVolume", $hash, 0 );
-    }
+    #if( $init_done ) {
+    #    InternalTimer( gettimeofday()+int(rand(2)), "HEOSGroup_GetGroupInfo", $hash, 0 );
+    #    InternalTimer( gettimeofday()+int(rand(4)), "HEOSGroup_GetGroupVolume", $hash, 0 );
+    #} else {
+    #    InternalTimer( gettimeofday()+15+int(rand(2)), "HEOSGroup_GetGroupInfo", $hash, 0 );
+    #    InternalTimer( gettimeofday()+15+int(rand(10)), "HEOSGroup_GetGroupVolume", $hash, 0 );
+    #}
     
     readingsBeginUpdate($hash);
     readingsBulkUpdate($hash, 'state','Initialized');
@@ -160,31 +151,31 @@ sub HEOSPlayer_Define($$) {
     readingsEndUpdate($hash, 1);
     
     
-    $modules{HEOSPlayer}{defptr}{$code} = $hash;
+    $modules{HEOSGroup}{defptr}{$code} = $hash;
     
     return undef;
 }
 
-sub HEOSPlayer_Undef($$) {
+sub HEOSGroup_Undef($$) {
 
     my ( $hash, $arg ) = @_;
     
-    my $pid = $hash->{PID};
+    my $gid = $hash->{GID};
     my $name = $hash->{NAME};
 
     
     RemoveInternalTimer($hash);
 
-    my $code = abs($pid);
+    my $code = abs($gid);
     $code = $hash->{IODev}->{NAME} ."-". $code if( defined($hash->{IODev}->{NAME}) );
-    delete($modules{HEOSPlayer}{defptr}{$code});
+    delete($modules{HEOSGroup}{defptr}{$code});
     
-    Log3 $name, 3, "HEOSPlayer ($name) - device $name deleted with Code: $code";
+    Log3 $name, 3, "HEOSGroup ($name) - device $name deleted with Code: $code";
 
     return undef;
 }
 
-sub HEOSPlayer_Attr(@) {
+sub HEOSGroup_Attr(@) {
 
     my ( $cmd, $name, $attrName, $attrVal ) = @_;
     my $hash = $defs{$name};
@@ -193,114 +184,45 @@ sub HEOSPlayer_Attr(@) {
     if( $attrName eq "disable" ) {
         if( $cmd eq "set" and $attrVal eq "1" ) {
             readingsSingleUpdate ( $hash, "state", "disabled", 1 );
-            Log3 $name, 3, "HEOSPlayer ($name) - disabled";
+            Log3 $name, 3, "HEOSGroup ($name) - disabled";
         }
 
         elsif( $cmd eq "del" ) {
             readingsSingleUpdate ( $hash, "state", "active", 1 );
-            Log3 $name, 3, "HEOSPlayer ($name) - enabled";
+            Log3 $name, 3, "HEOSGroup ($name) - enabled";
         }
     }
     
     if( $attrName eq "disabledForIntervals" ) {
         if( $cmd eq "set" ) {
-            Log3 $name, 3, "HEOSPlayer ($name) - enable disabledForIntervals";
+            Log3 $name, 3, "HEOSGroup ($name) - enable disabledForIntervals";
             readingsSingleUpdate ( $hash, "state", "Unknown", 1 );
         }
 
         elsif( $cmd eq "del" ) {
             readingsSingleUpdate ( $hash, "state", "active", 1 );
-            Log3 $name, 3, "HEOSPlayer ($name) - delete disabledForIntervals";
+            Log3 $name, 3, "HEOSGroup ($name) - delete disabledForIntervals";
         }
     }
 }
 
-sub HEOSPlayer_Set($$@) {
+sub HEOSGroup_Set($$@) {
     
     my ($hash, $name, @aa) = @_;
     my ($cmd, @args) = @aa;
     
-    my $pid     = $hash->{PID};
+    my $gid     = $hash->{GID};
     my $action;
     my $heosCmd;
     my $rvalue;
-    my $string  = "pid=$pid";
+    my $string  = "gid=$gid";
 
 
-    if( $cmd eq 'getPlayerInfo' ) {
-        return "usage: getPlayerInfo" if( @args != 0 );
+    if( $cmd eq 'getGroupInfo' ) {
+        return "usage: getGroupInfo" if( @args != 0 );
 
         $heosCmd    = $cmd;
-        
-    } elsif( $cmd eq 'getPlayState' ) {
-        return "usage: getPlayState" if( @args != 0 );
-        
-        $heosCmd    = $cmd;
-        
-    } elsif( $cmd eq 'getPlayMode' ) {
-        return "usage: getPlayMode" if( @args != 0 );
-        
-        $heosCmd    = $cmd;
-        
-    } elsif( $cmd eq 'getNowPlayingMedia' ) {
-        return "usage: getNowPlayingMedia" if( @args != 0 );
-        
-        $heosCmd    = $cmd;
-        
-    } elsif( $cmd eq 'repeat' ) {
-        return "usage: repeat" if( @args != 1 );
-        
-        $heosCmd    = 'setPlayMode';
-        
-        if($args[0] eq 'all') {
-        
-            $rvalue     = 'on_all';
-            
-        } elsif($args[0] eq 'one') {
-        
-            $rvalue     = 'on_one';
-            
-        } else {
-        
-            $rvalue     = $args[0];
-        }
-        
-        $action     = "repeat=$rvalue&shuffle=" . ReadingsVal($name,'shuffle','off');
-        
-    } elsif( $cmd eq 'shuffle' ) {
-        return "usage: shuffle" if( @args != 1 );
-        
-        $heosCmd    = 'setPlayMode';
-        
-        if(ReadingsVal($name,'repeat','off') eq 'all') {
-        
-            $rvalue     = 'on_all';
-            
-        } elsif(ReadingsVal($name,'repeat','off') eq 'one') {
-        
-            $rvalue     = 'on_one';
-        }
-        
-        $action     = "repeat=$rvalue&shuffle=$args[0]";
-        
-    } elsif( $cmd eq 'play' ) {
-        return "usage: play" if( @args != 0 );
-        
-        $heosCmd    = 'setPlayState';
-        $action     = "state=$cmd";
-        
-    } elsif( $cmd eq 'stop' ) {
-        return "usage: stop" if( @args != 0 );
-        
-        $heosCmd    = 'setPlayState';
-        $action     = "state=$cmd";
-        
-    } elsif( $cmd eq 'pause' ) {
-        return "usage: pause" if( @args != 0 );
-        
-        $heosCmd    = 'setPlayState';
-        $action     = "state=$cmd";
-        
+
     } elsif( $cmd eq 'mute' ) {
         return "usage: mute on/off" if( @args != 1 );
         
@@ -310,23 +232,23 @@ sub HEOSPlayer_Set($$@) {
     } elsif( $cmd eq 'volume' ) {
         return "usage: volume 0-100" if( @args != 1 );
         
-        $heosCmd    = 'setVolume';
+        $heosCmd    = 'setGroupVolume';
         $action     = "level=$args[0]";
         
     } elsif( $cmd eq 'volumeUp' ) {
         return "usage: volumeUp 0-10" if( @args != 1 );
         
-        $heosCmd    = $cmd;
+        $heosCmd    = 'GroupVolumeUp';
         $action     = "step=$args[0]";
         
     } elsif( $cmd eq 'volumeDown' ) {
         return "usage: volumeDown 0-10" if( @args != 1 );
         
-        $heosCmd    = $cmd;
+        $heosCmd    = 'groupVolumeDown';
         $action     = "step=$args[0]";
 
     } else {
-        my  $list = "getPlayerInfo:noArg getPlayState:noArg getNowPlayingMedia:noArg getPlayMode:noArg play:noArg stop:noArg pause:noArg mute:on,off volume:slider,0,5,100 volumeUp:slider,0,1,10 volumeDown:slider,0,1,10 repeat:one,all,off shuffle:on,off";
+        my  $list = "getGroupInfo:noArg mute:on,off volume:slider,0,5,100 volumeUp:slider,0,1,10 volumeDown:slider,0,1,10";
         return "Unknown argument $cmd, choose one of $list";
     }
     
@@ -334,50 +256,50 @@ sub HEOSPlayer_Set($$@) {
     $string     .= "&$action" if( defined($action));
     
     IOWrite($hash,"$heosCmd","$string");
-    Log3 $name, 4, "HEOSPlayer ($name) - IOWrite: $heosCmd $string IODevHash=$hash->{IODev}";
+    Log3 $name, 4, "HEOSGroup ($name) - IOWrite: $heosCmd $string IODevHash=$hash->{IODev}";
     
     return undef;
 }
 
-sub HEOSPlayer_Parse($$) {
+sub HEOSGroup_Parse($$) {
 
     my ($io_hash,$json) = @_;
     my $name            = $io_hash->{NAME};
-    my $pid;
+    my $gid;
     my $decode_json;
     
     
     $decode_json    = decode_json(encode_utf8($json));
 
-    Log3 $name, 4, "HEOSPlayer ($name) - ParseFn wurde aufgerufen";
+    Log3 $name, 4, "HEOSGroup ($name) - ParseFn wurde aufgerufen";
 
 
 
 
-    if( defined($decode_json->{pid}) ) {
+    if( defined($decode_json->{gid}) ) {
     
-        $pid            = $decode_json->{pid};
-        my $code        = abs($pid);
+        $gid            = $decode_json->{gid};
+        my $code        = abs($gid);
         $code           = $io_hash->{NAME} ."-". $code if( defined($io_hash->{NAME}) );
     
     
-        if( my $hash    = $modules{HEOSPlayer}{defptr}{$code} ) {
+        if( my $hash    = $modules{HEOSGroup}{defptr}{$code} ) {
         
             my $name    = $hash->{NAME};
             
-            #IOWrite($hash,'getPlayerInfo',"pid=$hash->{PID}");
-            #IOWrite($hash,'getPlayState',"pid=$hash->{PID}");              Erst mal schauen ob es ohne das geht, wenn nicht wieder aktivieren
-            #IOWrite($hash,'getNowPlayingMedia',"pid=$hash->{PID}");
+            #IOWrite($hash,'getPlayerInfo',"gid=$hash->{GID}");
+            #IOWrite($hash,'getPlayState',"gid=$hash->{GID}");              Erst mal schauen ob es ohne das geht, wenn nicht wieder aktivieren
+            #IOWrite($hash,'getNowPlayingMedia',"gid=$hash->{GID}");
             
-            Log3 $name, 4, "HEOSPlayer ($name) - find logical device: $hash->{NAME}";
-            Log3 $name, 5, "HEOSPlayer ($name) - PID direkt im root von decode_json gefunden";
+            Log3 $name, 4, "HEOSGroup ($name) - find logical device: $hash->{NAME}";
+            Log3 $name, 5, "HEOSGroup ($name) - gid direkt im root von decode_json gefunden";
             
             return $hash->{NAME};
         
         } else {
         
-            my $devname = "HEOSPlayer".abs($pid);
-            return "UNDEFINED $devname HEOSPlayer $pid IODev=$name";
+            my $devname = "HEOSGroup".abs($gid);
+            return "UNDEFINED $devname HEOSGroup $gid IODev=$name";
         }
         
     } else {
@@ -386,43 +308,43 @@ sub HEOSPlayer_Parse($$) {
         #unless($decode_json->{heos}{result} eq "success");         # Klappt bei Events nicht!! Lieber Fehlermeldung im Reading
 
         
-        if( defined($decode_json->{payload}{pid}) ) {
-            $pid        = $decode_json->{payload}{pid};
+        if( defined($decode_json->{payload}{gid}) ) {
+            $gid        = $decode_json->{payload}{gid};
             
-        } elsif ( $decode_json->{heos}{message} =~ /^pid=/ ) {
+        } elsif ( $decode_json->{heos}{message} =~ /^gid=/ ) {
         
-            my @pid     = split('&', $decode_json->{heos}{message});
-            $pid        = substr($pid[0],4);
-            Log3 $name, 4, "HEOSPlayer ($name) - PID[0]: $pid[0] and PID: $pid";
+            my @gid     = split('&', $decode_json->{heos}{message});
+            $gid        = substr($gid[0],4);
+            Log3 $name, 4, "HEOSGroup ($name) - gid[0]: $gid[0] and gid: $gid";
         
         }
         
         
-        my $code        = abs($pid);
+        my $code        = abs($gid);
         $code           = $io_hash->{NAME} ."-". $code if( defined($io_hash->{NAME}) );
     
-        if( my $hash    = $modules{HEOSPlayer}{defptr}{$code} ) {
+        if( my $hash    = $modules{HEOSGroup}{defptr}{$code} ) {
             my $name    = $hash->{NAME};
-            HEOSPlayer_WriteReadings($hash,$decode_json);
-            Log3 $name, 4, "HEOSPlayer ($name) - find logical device: $hash->{NAME}";
+            HEOSGroup_WriteReadings($hash,$decode_json);
+            Log3 $name, 4, "HEOSGroup ($name) - find logical device: $hash->{NAME}";
         
             return $hash->{NAME};
         
         } else {
         
-            my $devname = "HEOSPlayer".abs($pid);
-            return "UNDEFINED $devname HEOSPlayer $pid IODev=$name";
+            my $devname = "HEOSGroup".abs($gid);
+            return "UNDEFINED $devname HEOSGroup $gid IODev=$name";
         }
     }
 }
 
-sub HEOSPlayer_WriteReadings($$) {
+sub HEOSGroup_WriteReadings($$) {
 
     my ($hash,$decode_json)     = @_;
     my $name                    = $hash->{NAME};
     
     
-    Log3 $name, 3, "HEOSPlayer ($name) - processing data to write readings";
+    Log3 $name, 3, "HEOSGroup ($name) - processing data to write readings";
     
     
     
@@ -430,8 +352,8 @@ sub HEOSPlayer_WriteReadings($$) {
     ############################
     #### Aufbereiten der Daten soweit nötig (bei Events zum Beispiel)
     
-    my $readingsHash    = HEOSPlayer_PreProcessingReadings($hash,$decode_json)
-    if( $decode_json->{heos}{message} =~ /^pid=/ );
+    my $readingsHash    = HEOSGroup_PreProcessingReadings($hash,$decode_json)
+    if( $decode_json->{heos}{message} =~ /^gid=/ );
     
     
     ############################
@@ -442,7 +364,7 @@ sub HEOSPlayer_WriteReadings($$) {
     ### Event Readings
     if( ref($readingsHash) eq "HASH" ) {
         
-        Log3 $name, 4, "HEOSPlayer ($name) - response json Hash back from HEOSPlayer_PreProcessingReadings";
+        Log3 $name, 4, "HEOSGroup ($name) - response json Hash back from HEOSGroup_PreProcessingReadings";
         
         my $t;
         my $v;
@@ -480,7 +402,7 @@ sub HEOSPlayer_WriteReadings($$) {
     readingsBulkUpdate( $hash, 'state', 'on' );
     readingsEndUpdate( $hash, 1 );
     
-    Log3 $name, 5, "HEOSPlayer ($name) - readings set for $name";
+    Log3 $name, 5, "HEOSGroup ($name) - readings set for $name";
     return undef;
 }
 
@@ -488,7 +410,7 @@ sub HEOSPlayer_WriteReadings($$) {
 ###############
 ### my little Helpers
 
-sub HEOSPlayer_PreProcessingReadings($$) {
+sub HEOSGroup_PreProcessingReadings($$) {
 
     my ($hash,$decode_json)     = @_;
     my $name                    = $hash->{NAME};
@@ -497,7 +419,7 @@ sub HEOSPlayer_PreProcessingReadings($$) {
     my %buffer;
     
     
-    Log3 $name, 4, "HEOSPlayer ($name) - preprocessing readings";
+    Log3 $name, 4, "HEOSGroup ($name) - preprocessing readings";
     
     if ( $decode_json->{heos}{command} =~ /play_state/ or $decode_json->{heos}{command} =~ /player_state_changed/ ) {
     
@@ -564,61 +486,34 @@ sub HEOSPlayer_PreProcessingReadings($$) {
         
     } elsif ( $decode_json->{heos}{command} =~ /player_now_playing_changed/ ) {
         
-        IOWrite($hash,'getNowPlayingMedia',"pid=$hash->{PID}");
+        IOWrite($hash,'getNowPlayingMedia',"gid=$hash->{GID}");
         
     } else {
     
-        Log3 $name, 3, "HEOSPlayer ($name) - no match found";
+        Log3 $name, 3, "HEOSGroup ($name) - no match found";
         return undef;
     }
     
     
-    Log3 $name, 4, "HEOSPlayer ($name) - Match found for decode_json";
+    Log3 $name, 4, "HEOSGroup ($name) - Match found for decode_json";
     return \%buffer;
 }
 
-sub HEOSPlayer_GetPlayerInfo($) {
+sub HEOSGroup_GetGroupInfo($) {
 
     my $hash        = shift;
     
-    RemoveInternalTimer($hash,'HEOSPlayer_GetPlayerInfo');
-    IOWrite($hash,'getPlayerInfo',"pid=$hash->{PID}");
+    RemoveInternalTimer($hash,'HEOSGroup_GetGroupInfo');
+    IOWrite($hash,'getGroupInfo',"gid=$hash->{GID}");
     
 }
 
-sub HEOSPlayer_GetPlayState($) {
+sub HEOSGroup_GetGroupVolume($) {
 
     my $hash        = shift;
     
-    RemoveInternalTimer($hash,'HEOSPlayer_GetPlayState');
-    IOWrite($hash,'getPlayState',"pid=$hash->{PID}");
-    
-}
-
-sub HEOSPlayer_GetPlayMode($) {
-
-    my $hash        = shift;
-    
-    RemoveInternalTimer($hash,'HEOSPlayer_GetPlayMode');
-    IOWrite($hash,'getPlayMode',"pid=$hash->{PID}");
-    
-}
-
-sub HEOSPlayer_GetNowPlayingMedia($) {
-
-    my $hash        = shift;
-    
-    RemoveInternalTimer($hash,'HEOSPlayer_GetNowPlayingMedia');
-    IOWrite($hash,'getNowPlayingMedia',"pid=$hash->{PID}");
-    
-}
-
-sub HEOSPlayer_GetVolume($) {
-
-    my $hash        = shift;
-    
-    RemoveInternalTimer($hash,'HEOSPlayer_GetVolume');
-    IOWrite($hash,'getVolume',"pid=$hash->{PID}");
+    RemoveInternalTimer($hash,'HEOSGroup_GetGroupVolume');
+    IOWrite($hash,'getGroupVolume',"gid=$hash->{GID}");
     
 }
 
