@@ -5,6 +5,10 @@
 #  (c) 2017 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
 #  All rights reserved
 #
+#   Special thanks goes to comitters:
+#       - Olaf Schnicke
+#
+#
 #  This script is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2 of the License, or
@@ -34,7 +38,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
 
-my $version = "0.1.47";
+my $version = "0.1.55";
 
 
 
@@ -53,6 +57,7 @@ sub HEOSPlayer_GetPlayState($);
 sub HEOSPlayer_GetNowPlayingMedia($);
 sub HEOSPlayer_GetPlayMode($);
 sub HEOSPlayer_GetVolume($);
+sub HEOSPlayer_Get($$@);
 
 
 
@@ -62,7 +67,7 @@ sub HEOSPlayer_Initialize($) {
 
     my ($hash) = @_;
 
-    $hash->{Match}          = '.*{"command":."player.*|.*{"command":."event/player.*|.*{"command":."event\/repeat_mode_changed.*|.*{"command":."event\/shuffle_mode_changed.*';
+    $hash->{Match}          = '.*{"command":."player.*|.*{"command":."event/player.*|.*{"command":."event\/repeat_mode_changed.*|.*{"command":."event\/shuffle_mode_changed.*|.*{"command":."event\/favorites_changed.*';
     
     # Provider
     $hash->{SetFn}          = "HEOSPlayer_Set";
@@ -215,6 +220,56 @@ sub HEOSPlayer_Attr(@) {
     }
 }
 
+sub HEOSPlayer_Get($$@) {
+
+    my ($hash, $name, @aa) = @_;
+    my ($cmd, @args) = @aa;
+    
+    my $pid     = $hash->{PID};
+    my $result  = "";
+
+    
+    
+    
+    #Leerzeichen müßen für die Rückgabe escaped werden sonst werden sie falsch angezeigt
+    if( $cmd eq 'playlists' ) {
+        
+        #gibt die Playlisten durch Komma getrennt zurück
+        my @playlists = map { my %n; $n{name} = $_->{name}; $n{name} =~ s/\s+/\&nbsp;/g; $n{name} } (@{ $hash->{IODev}{helper}{playlists}});
+        
+        $result .= join(",",@playlists) if( scalar @playlists > 0 );
+        
+        return $result;
+        
+    } elsif( $cmd eq 'channels' ) {
+    
+        #gibt die Favoriten durch Komma getrennt zurück
+        my @channels = map { my %n; $n{name} = $_->{name}; $n{name} =~ s/\s+/\&nbsp;/g; $n{name} } (@{ $hash->{IODev}{helper}{favorites}});
+    
+        $result .= join(",",@channels) if( scalar @channels > 0 );
+        
+        return $result;
+        
+    } elsif( $cmd eq 'channelscount' ) {
+    
+        #gibt die Favoritenanzahl zurück
+        return scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );		
+    
+    } elsif( $cmd eq 'inputs' ) {
+        
+        #gibt die Quellen durch Komma getrennt zurück	
+        my @inputs = map { my %n; $n{name} = $_->{name}; $n{name} =~ s/\s+/\&nbsp;/g; $n{name} } (@{ $hash->{IODev}{helper}{sources}});
+        
+        $result .= join(",",@inputs) if( scalar @inputs > 0 );
+        
+        return $result;
+    }
+
+    my $list = 'playlists:noArg channels:noArg channelscount:noArg inputs:noArg';
+
+    return "Unknown argument $cmd, choose one of $list";
+}
+
 sub HEOSPlayer_Set($$@) {
     
     my ($hash, $name, @aa) = @_;
@@ -224,7 +279,7 @@ sub HEOSPlayer_Set($$@) {
     my $action;
     my $heosCmd;
     my $rvalue;
-    my $string  = "pid=$pid";
+    my $favcount = 1;
 
 
     if( $cmd eq 'getPlayerInfo' ) {
@@ -324,13 +379,229 @@ sub HEOSPlayer_Set($$@) {
         
         $heosCmd    = $cmd;
         $action     = "step=$args[0]";
+        
+    } elsif( $cmd eq 'groupWithMember' ) {
+        return "usage: groupWithMember" if( @args != 1 );
+        
+        $pid       .= ",$defs{$args[0]}->{PID}";
+        $heosCmd    = 'createGroup';
+
+    } elsif( $cmd eq 'next' ) {
+    
+        return "usage: next" if( @args != 0 );        
+        $heosCmd    = 'playNext';        
+        
+    } elsif( $cmd eq 'prev' ) {
+    
+        return "usage: prev" if( @args != 0 );        
+        $heosCmd    = 'playPrev';
+        
+    } elsif( $cmd eq 'reReadSources' ) { 
+    
+        return "usage: reReadSources" if( @args != 0 ); 
+        $heosCmd    = 'getMusicSources';
+        
+    } elsif ( $cmd eq 'channel' ) {
+
+        return "usage: channel 1-$favcount" if( @args != 1 );
+        $favcount = scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );
+        
+        $heosCmd    = 'playPresetStation';
+        $action     = "preset=$args[0]";
+        
+	} elsif( $cmd eq 'channelUp' ) {
+	
+        return "usage: channelUp" if( @args != 0 );        
+        $favcount = scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );
+        
+        $heosCmd    = 'playPresetStation';
+        my $fav = ReadingsVal($name,"channel", 0) + 1;
+        $fav = $favcount if ( $fav > $favcount);
+        $action     = "preset=".$fav;
+        
+    } elsif( $cmd eq 'channelDown' ) {
+    
+        return "usage: channelDown" if( @args != 0 );
+        
+        $heosCmd    = 'playPresetStation';
+        my $fav = ReadingsVal($name,"channel", 0) - 1;
+        $fav = 1 if ($fav <= 0);
+        $action     = "preset=".$fav;
+        
+    } elsif ( $cmd eq 'playlist' ) {
+    
+        my @cids =  map { $_->{cid} } grep { $_->{name} =~ /$args[0]/i } (@{ $hash->{IODev}{helper}{playlists} });
+        
+        if ( scalar @args == 1 && scalar @cids == 1 ) {
+        
+            $heosCmd    = 'playPlaylist';
+            $action     = "sid=1025&cid=$cids[0]&aid=4";	
+            
+        } else {
+        
+            my @playlists = map { $_->{name} } (@{ $hash->{IODev}{helper}{playlists}});				
+            return "usage: playlist ".join(",",@playlists); 
+        }
+        
+    } elsif( $cmd eq 'input' ) {		
+        
+        my $search = $args[0];
+        my @sids =  map { $_->{sid} } grep { $_->{name} =~ /$search/i } (@{ $hash->{IODev}{helper}{sources} });
+        
+        #$search =~ s/\s+/\&nbsp;/g;
+        $search =~ s/\xC2\xA0/ /g;
+        
+        #print "Suchkriterium\n".Dumper($search);
+        #print hexdump(\$search);
+        #print "Quellen\n".Dumper($hash->{IODev}{helper}{sources});
+        
+        if ( scalar @args == 1 && scalar @sids == 1 ) {
+        
+            readingsSingleUpdate($hash, "input", $args[0], 1);
+            #sid des Input für Container merken
+            readingsSingleUpdate($hash, ".input", $sids[0], 1);
+            #alten Container löschen bei Inputwechsel
+            readingsSingleUpdate($hash, ".cid", 0, 1);
+            
+            $heosCmd = 'browseSource';		
+            $action = "sid=$sids[0]";
+            
+            Log3 $name, 4, "HEOSPlayer ($name) - set input with sid $sids[0] and name $args[0]";	
+            
+        } else {
+        
+            my @inputs = map { $_->{name} } (@{ $hash->{IODev}{helper}{sources}});						
+            return "usage: input ".join(",",@inputs);        
+        }
+
+    } elsif( $cmd eq 'media' ) {
+    
+        if ( scalar @args == 1 ) {
+        
+            #sid des Input holen
+            my $sid = ReadingsVal($name,".input", undef);			 
+            return "usage: set input first" unless( defined($sid) );
+            
+            my $search = $args[0];
+            $search =~ s/\xC2\xA0/ /g;
+            
+            #print "Suchkriterium\n".Dumper($search);
+            #print hexdump(\$search);
+            #print "Medien\n".Dumper($hash->{IODev}{helper}{media});
+            
+            my @ids = grep { $_->{name} =~ /\Q$search\E/i } (@{ $hash->{IODev}{helper}{media} });
+            #print "gefundenes Medium\n".Dumper(@ids);
+            
+            if ( scalar @ids == 1 ) {
+                if ( exists $ids[0]{cid} ) {
+                    #hier Container verarbeiten
+                    if ( $ids[0]{playable} eq "yes" ) {
+                    
+                        #alles abspielen
+                        $heosCmd    = 'playPlaylist';
+                        $action     = "sid=$sid&cid=$ids[0]{cid}&aid=4";
+                        #Container merken
+                        readingsSingleUpdate($hash, ".cid", 0, 1);
+                        
+                    } else {
+                    
+                        #mehr einlesen
+                        readingsSingleUpdate($hash, ".cid", $ids[0]{cid}, 1);
+                        $heosCmd = 'browseSource';		
+                        $action = "sid=$sid&cid=$ids[0]{cid}";	
+                    }
+                    
+                } elsif ( exists $ids[0]{mid} ) {
+                    #hier Medien verarbeiten
+                    if ( $ids[0]{mid} =~ /inputs\// ) {
+                    
+                        #Input abspielen
+                        $heosCmd = 'playInput';		
+                        $action = "input=$ids[0]{mid}";
+                        
+                    } else {
+                    
+                        #aktuellen Container holen
+                        my $cid = ReadingsVal($name,".cid", undef);				
+                        if ( defined $cid ) {
+                            if ( $ids[0]{type} eq "station" ) {
+                            
+                                #Radio abspielen
+                                $heosCmd = 'playStream';		
+                                $action = "sid=$sid&cid=$cid&mid=$ids[0]{mid}";
+                                
+                            } else {
+                            
+                                #Song abspielen
+                                $heosCmd = 'playPlaylist';		
+                                $action = "sid=$sid&cid=$cid&mid=$ids[0]{mid}&aid=4";						
+                            }
+                        }
+                    }
+                }
+            }
+            
+        } else {
+        
+            my @media = map { $_->{name} } (@{ $hash->{IODev}{helper}{media}});				
+            return "usage: media ".join(",",@media);   
+        }
+        
+    } elsif ( $cmd eq 'clearqueue' ) {
+    
+        #löscht die Warteschlange
+        return "usage: clearqueue" if( @args != 0 );
+        $heosCmd    = 'clearQueue';
+        
+    } elsif ( $cmd eq 'savequeue' ) {
+    
+        #speichert die aktuelle Warteschlange als Favorit ab
+        return "usage: savequeue" if( @args != 1 );
+        
+        $heosCmd    = 'saveQueue name';
+        $action = "name=$args[0]";
+        
+    #} elsif( $cmd eq 'sayText' ) {
+    #	return "usage: sayText Text" if( @args != 1 );
 
     } else {
-        my  $list = "getPlayerInfo:noArg getPlayState:noArg getNowPlayingMedia:noArg getPlayMode:noArg play:noArg stop:noArg pause:noArg mute:on,off volume:slider,0,5,100 volumeUp:slider,0,1,10 volumeDown:slider,0,1,10 repeat:one,all,off shuffle:on,off";
+    
+        my @playlists;
+        my @inputs;
+        my @media;
+        
+        my  $list = "getPlayerInfo:noArg getPlayState:noArg getNowPlayingMedia:noArg getPlayMode:noArg play:noArg stop:noArg pause:noArg mute:on,off volume:slider,0,5,100 volumeUp:slider,0,1,10 volumeDown:slider,0,1,10 repeat:one,all,off shuffle:on,off clearqueue:noArg savequeue channelUp:noArg channelDown:noArg ";
+        
+        $list .= "groupWithMember:" . join( ",", devspec2array("TYPE=HEOSPlayer:FILTER=NAME!=$name") );
+        
+        #Parameterlisten für FHEMWeb zusammen bauen
+        $list .= " channel:slider,1,1,".scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );		
+        
+        if ( defined $hash->{IODev}{helper}{playlists} ) {
+        
+            @playlists = map { my %n; $n{name} = $_->{name}; $n{name} =~ s/\s+/\&nbsp;/g; $n{name} } (@{ $hash->{IODev}{helper}{playlists}});
+            $list .= " playlist:".join(",",@playlists) if( scalar @playlists > 0 );
+        }
+        
+        if ( defined $hash->{IODev}{helper}{sources}) {
+        
+            @inputs = map { my %n; $n{name} = $_->{name}; $n{name} =~ s/\s+/\&nbsp;/g; $n{name} } (@{ $hash->{IODev}{helper}{sources}});
+            $list .= " input:".join(",",@inputs) if( scalar @inputs > 0 );
+        }
+        
+        if ( defined $hash->{IODev}{helper}{media}) {
+        
+            @media = map { my %n; $n{name} = $_->{name}; $n{name} =~ s/\s+/\&nbsp;/g; $n{name} } (@{ $hash->{IODev}{helper}{media}});
+            push(@media,"Alle") if grep { $_->{container} =~ /yes/i && $_->{playable} =~ /yes/i} (@{ $hash->{IODev}{helper}{media} });
+            #print "#####################################################\n".Dumper(@media);
+            $list .= " media:".join(",",@media) if( scalar @media > 0 );
+        }
+        
         return "Unknown argument $cmd, choose one of $list";
     }
     
     
+    my $string  = "pid=$pid";
     $string     .= "&$action" if( defined($action));
     
     IOWrite($hash,"$heosCmd","$string");
@@ -365,12 +636,9 @@ sub HEOSPlayer_Parse($$) {
         
             my $name    = $hash->{NAME};
             
-            #IOWrite($hash,'getPlayerInfo',"pid=$hash->{PID}");
-            #IOWrite($hash,'getPlayState',"pid=$hash->{PID}");              Erst mal schauen ob es ohne das geht, wenn nicht wieder aktivieren
-            #IOWrite($hash,'getNowPlayingMedia',"pid=$hash->{PID}");
-            
+            IOWrite($hash,'getPlayerInfo',"pid=$hash->{PID}");
             Log3 $name, 4, "HEOSPlayer ($name) - find logical device: $hash->{NAME}";
-            Log3 $name, 5, "HEOSPlayer ($name) - PID direkt im root von decode_json gefunden";
+            Log3 $name, 4, "HEOSPlayer ($name) - find PID in root from decode_json";
             
             return $hash->{NAME};
         
@@ -476,6 +744,11 @@ sub HEOSPlayer_WriteReadings($$) {
     readingsBulkUpdate( $hash, 'currentSid', $decode_json->{payload}{sid} );
     readingsBulkUpdate( $hash, 'currentStation', $decode_json->{payload}{station} );
     
+    #sucht in den Favoriten nach der aktuell gespielten Radiostation und aktualisiert den channel wenn diese enthalten ist
+    my @presets = map { $_->{name} } (@{ $hash->{IODev}{helper}{favorites} });
+    my $search = ReadingsVal($name,"currentStation" ,undef);
+    my( @index )= grep { $presets[$_] eq $search } 0..$#presets if ( defined $search );
+    readingsBulkUpdate( $hash, 'channel', $index[0]+1 ) if ( scalar @index > 0 );
     
     readingsBulkUpdate( $hash, 'state', 'on' );
     readingsEndUpdate( $hash, 1 );
@@ -562,9 +835,19 @@ sub HEOSPlayer_PreProcessingReadings($$) {
         my @value               = split('&', $decode_json->{heos}{message});
         $buffer{'shuffle'}      = substr($value[1],8);
         
-    } elsif ( $decode_json->{heos}{command} =~ /player_now_playing_changed/ ) {
+    } elsif ( $decode_json->{heos}{command} =~ /player_now_playing_changed/ or $decode_json->{heos}{command} =~ /favorites_changed/ ) {
         
         IOWrite($hash,'getNowPlayingMedia',"pid=$hash->{PID}");
+        
+    } elsif ( $decode_json->{heos}{command} =~ /play_preset/ ) {
+
+        my @value            	= split('&', $decode_json->{heos}{message});
+        $buffer{'channel'}   	= substr($value[1],7);
+
+    } elsif ( $decode_json->{heos}{command} =~ /play_input/ ) {
+    
+        my @value               = split('&', $decode_json->{heos}{message});
+        $buffer{'input'}   		= substr($value[1],6);
         
     } else {
     
@@ -621,6 +904,7 @@ sub HEOSPlayer_GetVolume($) {
     IOWrite($hash,'getVolume',"pid=$hash->{PID}");
     
 }
+
 
 
 
