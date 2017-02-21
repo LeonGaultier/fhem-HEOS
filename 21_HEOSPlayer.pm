@@ -38,7 +38,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
 
-my $version = "0.1.55";
+my $version = "0.1.56";
 
 
 
@@ -58,6 +58,7 @@ sub HEOSPlayer_GetNowPlayingMedia($);
 sub HEOSPlayer_GetPlayMode($);
 sub HEOSPlayer_GetVolume($);
 sub HEOSPlayer_Get($$@);
+sub HEOSPlayer_GetMute($);
 
 
 
@@ -150,12 +151,14 @@ sub HEOSPlayer_Define($$) {
         InternalTimer( gettimeofday()+int(rand(6)), "HEOSPlayer_GetNowPlayingMedia", $hash, 0 );
         InternalTimer( gettimeofday()+int(rand(8)), "HEOSPlayer_GetPlayMode", $hash, 0 );
         InternalTimer( gettimeofday()+int(rand(10)), "HEOSPlayer_GetVolume", $hash, 0 );
+        InternalTimer( gettimeofday()+int(rand(12)), "HEOSPlayer_GetMute", $hash, 0 );
    } else {
         InternalTimer( gettimeofday()+15+int(rand(2)), "HEOSPlayer_GetPlayerInfo", $hash, 0 );
         InternalTimer( gettimeofday()+15+int(rand(4)), "HEOSPlayer_GetPlayState", $hash, 0 );
         InternalTimer( gettimeofday()+15+int(rand(6)), "HEOSPlayer_GetNowPlayingMedia", $hash, 0 );
         InternalTimer( gettimeofday()+15+int(rand(8)), "HEOSPlayer_GetPlayMode", $hash, 0 );
         InternalTimer( gettimeofday()+15+int(rand(10)), "HEOSPlayer_GetVolume", $hash, 0 );
+        InternalTimer( gettimeofday()+15+int(rand(12)), "HEOSPlayer_GetMute", $hash, 0 );
     }
     
     readingsBeginUpdate($hash);
@@ -385,6 +388,11 @@ sub HEOSPlayer_Set($$@) {
         
         $pid       .= ",$defs{$args[0]}->{PID}";
         $heosCmd    = 'createGroup';
+        
+    } elsif( $cmd eq 'clearGroup' ) {
+        return "usage: clearGroup" if( @args != 0 );
+                
+        $heosCmd    = 'createGroup';
 
     } elsif( $cmd eq 'next' ) {
     
@@ -451,10 +459,6 @@ sub HEOSPlayer_Set($$@) {
         #$search =~ s/\s+/\&nbsp;/g;
         $search =~ s/\xC2\xA0/ /g;
         
-        #print "Suchkriterium\n".Dumper($search);
-        #print hexdump(\$search);
-        #print "Quellen\n".Dumper($hash->{IODev}{helper}{sources});
-        
         if ( scalar @args == 1 && scalar @sids == 1 ) {
         
             readingsSingleUpdate($hash, "input", $args[0], 1);
@@ -484,10 +488,6 @@ sub HEOSPlayer_Set($$@) {
             
             my $search = $args[0];
             $search =~ s/\xC2\xA0/ /g;
-            
-            #print "Suchkriterium\n".Dumper($search);
-            #print hexdump(\$search);
-            #print "Medien\n".Dumper($hash->{IODev}{helper}{media});
             
             my @ids = grep { $_->{name} =~ /\Q$search\E/i } (@{ $hash->{IODev}{helper}{media} });
             #print "gefundenes Medium\n".Dumper(@ids);
@@ -593,7 +593,6 @@ sub HEOSPlayer_Set($$@) {
         
             @media = map { my %n; $n{name} = $_->{name}; $n{name} =~ s/\s+/\&nbsp;/g; $n{name} } (@{ $hash->{IODev}{helper}{media}});
             push(@media,"Alle") if grep { $_->{container} =~ /yes/i && $_->{playable} =~ /yes/i} (@{ $hash->{IODev}{helper}{media} });
-            #print "#####################################################\n".Dumper(@media);
             $list .= " media:".join(",",@media) if( scalar @media > 0 );
         }
         
@@ -807,6 +806,10 @@ sub HEOSPlayer_PreProcessingReadings($$) {
         
         $buffer{'shuffle'}  = substr($value[2],8);
         
+    } elsif ( $decode_json->{heos}{command} =~ /get_mute/ ) {
+		my @value           = split('&', $decode_json->{heos}{message});        
+        $buffer{'mute'}     = substr($value[1],6);
+        
     } elsif ( $decode_json->{heos}{command} =~ /volume_up/ or $decode_json->{heos}{command} =~ /volume_down/ ) {
     
         my @value               = split('&', $decode_json->{heos}{message});
@@ -902,6 +905,15 @@ sub HEOSPlayer_GetVolume($) {
     
     RemoveInternalTimer($hash,'HEOSPlayer_GetVolume');
     IOWrite($hash,'getVolume',"pid=$hash->{PID}");
+    
+}
+
+sub HEOSPlayer_GetMute($) {
+
+    my $hash        = shift;
+    
+    RemoveInternalTimer($hash,'HEOSPlayer_GetMute');
+    IOWrite($hash,'getMute',"pid=$hash->{PID}");
     
 }
 

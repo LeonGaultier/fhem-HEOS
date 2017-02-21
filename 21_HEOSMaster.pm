@@ -50,7 +50,7 @@ use Encode qw(encode_utf8);
 use Net::Telnet;
 
 
-my $version = "0.1.55";
+my $version = "0.1.56";
 
 
 my %heosCmds = (
@@ -67,6 +67,8 @@ my %heosCmds = (
     'getGroupInfo'              => 'group/get_group_info?',
     'getPlayState'              => 'player/get_play_state?',
     'getPlayMode'               => 'player/get_play_mode?',
+    'getMute'                   => 'player/get_mute?'
+    'getGroupMute'              => 'group/get_mute?',
     'clearQueue'                => 'player/clear_queue?',
 	'saveQueue'                 => 'player/save_queue?',
     'getVolume'                 => 'player/get_volume?',
@@ -74,12 +76,13 @@ my %heosCmds = (
     'setPlayState'              => 'player/set_play_state?',
     'setPlayMode'               => 'player/set_play_mode?',
     'setMute'                   => 'player/set_mute?',
+    'setGroupMute'              => 'group/set_mute?',
     'playNext'                  => 'player/play_next?',
-	'playPrev'                  => 'player/play_prev?',
-	'playPresetStation'         => 'browse/play_preset?',
-	'playInput'                 => 'browse/play_input?',
-	'playStream'                => 'browse/play_stream?',
-	'playPlaylist'              => 'browse/add_to_queue?',
+    'playPrev'                  => 'player/play_prev?',
+    'playPresetStation'         => 'browse/play_preset?',
+    'playInput'                 => 'browse/play_input?',
+    'playStream'                => 'browse/play_stream?',
+    'playPlaylist'              => 'browse/add_to_queue?',
     'setVolume'                 => 'player/set_volume?',
     'setGroupVolume'            => 'group/set_volume?',
     'volumeUp'                  => 'player/volume_up?',
@@ -137,7 +140,7 @@ sub HEOSMaster_Initialize($) {
     $hash->{WriteFn}    =   "HEOSMaster_Write";
     $hash->{Clients}    =   ":HEOSPlayer:";
     $hash->{MatchList}  = { "1:HEOSPlayer"      => '.*{"command":."player.*|.*{"command":."event\/player.*|.*{"command":."event\/repeat_mode_changed.*|.*{"command":."event\/shuffle_mode_changed.*|.*{"command":."event\/favorites_changed.*',
-                            "2:HEOSGroup"       => '.*{"command":."group.*'
+                            "2:HEOSGroup"       => '.*{"command":."group.*|.*{"command":."event\/group.*'
                             };
 
 
@@ -386,6 +389,7 @@ sub HEOSMaster_Open($) {
     HEOSMaster_GetPlayers($hash);
     InternalTimer( gettimeofday()+1, 'HEOSMaster_EnableChangeEvents', $hash, 0 );
     InternalTimer( gettimeofday()+2, 'HEOSMaster_GetMusicSources', $hash, 0 );
+    InternalTimer( gettimeofday()+3, 'HEOSMaster_GetGroups', $hash, 0 );
 }
 
 sub HEOSMaster_Close($) {
@@ -685,6 +689,14 @@ sub HEOSMaster_ResponseProcessing($$) {
         Log3 $name, 4, "HEOSMaster ($name) - user changed";
         return;
     }
+    
+    #Gruppen neu einlesen
+    if( $decode_json->{heos}{command} =~ /^event\/groups_changed/ ) {
+        #InternalTimer( gettimeofday()+5, 'HEOSMaster_GetGroups', $hash, 0 );
+        HEOSMaster_Write($hash,'getGroups',undef);
+        Log3 $name, 4, "HEOSMaster ($name) - groups changed";
+        return;
+    }
 
     if( $decode_json->{heos}{command} =~ /^player/ or $decode_json->{heos}{command} =~ /^event\/player/ or $decode_json->{heos}{command} =~ /^group/ or $decode_json->{heos}{command} =~ /^event\/group/ or $decode_json->{heos}{command} =~ /^event\/repeat_mode_changed/ or $decode_json->{heos}{command} =~ /^event\/shuffle_mode_changed/ ) {
     
@@ -703,7 +715,7 @@ sub HEOSMaster_ResponseProcessing($$) {
                     $json .=    '","heos": {"command": "player/get_players"}}';
 
                     Dispatch($hash,$json,undef);
-                    Log3 $name, 4, "HEOSMaster ($name) - call Dispatcher";
+                    Log3 $name, 4, "HEOSMaster ($name) - call Dispatcher for Players";
                 }
 
                 return;
@@ -718,7 +730,7 @@ sub HEOSMaster_ResponseProcessing($$) {
                     $json .=    '","heos": {"command": "group/get_groups"}}';
 
                     Dispatch($hash,$json,undef);
-                    Log3 $name, 4, "HEOSMaster ($name) - call Dispatcher";
+                    Log3 $name, 4, "HEOSMaster ($name) - call Dispatcher for Groups";
                 }
             
                 return;
@@ -727,10 +739,16 @@ sub HEOSMaster_ResponseProcessing($$) {
         } elsif( defined($decode_json->{payload}{pid}) ) {
     
             Dispatch($hash,$json,undef);
-            Log3 $name, 4, "HEOSMaster ($name) - call Dispatcher";
+            Log3 $name, 4, "HEOSMaster ($name) - call Dispatcher for PlayerInfo";
             return;
             
-        } elsif( defined($decode_json->{heos}{message}) and $decode_json->{heos}{message} =~ /^pid=/ ) {
+        } elsif( defined($decode_json->{payload}{gid}) and defined($decode_json->{payload}{players}) ) {
+    
+            Dispatch($hash,$json,undef);
+            Log3 $name, 4, "HEOSMaster ($name) - call Dispatcher for GroupInfo";
+            return;
+            
+        } elsif( (defined($decode_json->{heos}{message})) and ($decode_json->{heos}{message} =~ /^pid=/ or $decode_json->{heos}{message} =~ /^gid=/) ) {
         
             Dispatch($hash,$json,undef);
             Log3 $name, 4, "HEOSMaster ($name) - call Dispatcher";
@@ -863,6 +881,7 @@ sub HEOSMaster_PreProcessingReadings($$) {
     } elsif ( $decode_json->{heos}{command} eq 'system/check_account' or $decode_json->{heos}{command} eq 'system/sign_in' ) {
         
         my @value               = split('&', $decode_json->{heos}{message});
+        
         if( $decode_json->{heos}{message} eq 'signed_out' ) {
         
             $buffer{'heosAccount'}  = $value[0];
@@ -870,6 +889,7 @@ sub HEOSMaster_PreProcessingReadings($$) {
         } else {
 
             $buffer{'heosAccount'}  = $value[0] . ' as ' . substr($value[1],3);
+            HEOSMaster_GetFavorites($hash) if( ReadingsVal($name,"enableChangeEvents", "off") eq "on" );
         }
         
     } else {
@@ -914,7 +934,7 @@ sub HEOSMaster_GetGroups($) {
     RemoveInternalTimer($hash,'HEOSMaster_GetGroups');
     
     HEOSMaster_Write($hash,'getGroups',undef);
-    Log3 $name, 4, "HEOSMaster ($name) - getPlayers";
+    Log3 $name, 4, "HEOSMaster ($name) - getGroups";
 }
 
 sub HEOSMaster_EnableChangeEvents($) {

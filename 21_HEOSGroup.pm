@@ -5,6 +5,10 @@
 #  (c) 2017 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
 #  All rights reserved
 #
+#   Special thanks goes to comitters:
+#       - Olaf Schnicke
+#
+#
 #  This script is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2 of the License, or
@@ -34,7 +38,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
 
-my $version = "0.1.51";
+my $version = "0.1.56";
 
 
 
@@ -50,6 +54,7 @@ sub HEOSGroup_Set($$@);
 sub HEOSGroup_PreProcessingReadings($$);
 sub HEOSGroup_GetGroupInfo($);
 sub HEOSGroup_GetGroupVolume($);
+sub HEOSGroup_GetGroupMute($);
 
 
 
@@ -59,7 +64,7 @@ sub HEOSGroup_Initialize($) {
 
     my ($hash) = @_;
 
-    $hash->{Match}          = '.*{"command":."group.*';
+    $hash->{Match}          = '.*{"command":."group.*|.*{"command":."event\/group.*';
     
     # Provider
     $hash->{SetFn}          = "HEOSGroup_Set";
@@ -139,9 +144,11 @@ sub HEOSGroup_Define($$) {
     if( $init_done ) {
         InternalTimer( gettimeofday()+int(rand(2)), "HEOSGroup_GetGroupInfo", $hash, 0 );
         InternalTimer( gettimeofday()+int(rand(4)), "HEOSGroup_GetGroupVolume", $hash, 0 );
+        InternalTimer( gettimeofday()+int(rand(6)), "HEOSGroup_GetGroupMute", $hash, 0 );
     } else {
         InternalTimer( gettimeofday()+15+int(rand(2)), "HEOSGroup_GetGroupInfo", $hash, 0 );
-        InternalTimer( gettimeofday()+15+int(rand(10)), "HEOSGroup_GetGroupVolume", $hash, 0 );
+        InternalTimer( gettimeofday()+15+int(rand(4)), "HEOSGroup_GetGroupVolume", $hash, 0 );
+        InternalTimer( gettimeofday()+15+int(rand(6)), "HEOSGroup_GetGroupMute", $hash, 0 );
     }
     
     readingsBeginUpdate($hash);
@@ -287,6 +294,7 @@ sub HEOSGroup_Parse($$) {
         
             my $name    = $hash->{NAME};
             
+            IOWrite($hash,'getGroupInfo',"gid=$hash->{GID}");
             Log3 $name, 4, "HEOSGroup ($name) - find logical device: $hash->{NAME}";
             Log3 $name, 4, "HEOSGroup ($name) - find GID in root from decode_json";
             
@@ -373,26 +381,32 @@ sub HEOSGroup_WriteReadings($$) {
     }
     
     
-    ### PlayerInfos
+    ### GroupInfos
     readingsBulkUpdate( $hash, 'name', $decode_json->{payload}{name} );
     readingsBulkUpdate( $hash, 'gid', $decode_json->{payload}{gid} );
-    readingsBulkUpdate( $hash, 'model', $decode_json->{payload}{model} );
-    readingsBulkUpdate( $hash, 'version', $decode_json->{payload}{version} );
-    readingsBulkUpdate( $hash, 'network', $decode_json->{payload}{network} );
-    readingsBulkUpdate( $hash, 'lineout', $decode_json->{payload}{lineout} );
-    readingsBulkUpdate( $hash, 'control', $decode_json->{payload}{control} );
-    readingsBulkUpdate( $hash, 'ip-address', $decode_json->{payload}{ip} );
     
-    ### playing Infos
-    readingsBulkUpdate( $hash, 'currentMedia', $decode_json->{payload}{type} );
-    readingsBulkUpdate( $hash, 'currentTitle', $decode_json->{payload}{song} );
-    readingsBulkUpdate( $hash, 'currentAlbum', $decode_json->{payload}{album} );
-    readingsBulkUpdate( $hash, 'currentArtist', $decode_json->{payload}{artist} );
-    readingsBulkUpdate( $hash, 'currentImageUrl', $decode_json->{payload}{image_url} );
-    readingsBulkUpdate( $hash, 'currentMid', $decode_json->{payload}{mid} );
-    readingsBulkUpdate( $hash, 'currentQid', $decode_json->{payload}{qid} );
-    readingsBulkUpdate( $hash, 'currentSid', $decode_json->{payload}{sid} );
-    readingsBulkUpdate( $hash, 'currentStation', $decode_json->{payload}{station} );
+
+    my @members;
+
+    if( ref($decode_json->{payload}{players}) eq "ARRAY" ) {
+        foreach my $player (@{ $decode_json->{payload}{players} }) {
+        
+            readingsBulkUpdate( $hash, 'leader', $player->{name} ) if ( $player->{role} eq "leader" );
+            push( @members, $player->{name}) if ( $player->{role} eq "member" );
+            print"Player ###################################\n".Dumper($player);
+        }
+    }
+    
+    if( scalar @members > 1 ) {
+    
+        readingsBulkUpdate( $hash, 'member', join(",",@members) );
+        
+    } else {
+    
+        readingsBulkUpdate( $hash, 'member', $members[0] );
+    }
+    
+    print"Member ##################################\n".Dumper(@members);
     
     
     readingsBulkUpdate( $hash, 'state', 'on' );
@@ -429,6 +443,10 @@ sub HEOSGroup_PreProcessingReadings($$) {
         $buffer{'volumeUp'}     = substr($value[1],5) if( $decode_json->{heos}{command} =~ /volume_up/ );
         $buffer{'volumeDown'}   = substr($value[1],5) if( $decode_json->{heos}{command} =~ /volume_down/ );
         
+    } elsif ( $decode_json->{heos}{command} =~ /get_mute/ ) {
+        my @value           = split('&', $decode_json->{heos}{message});        
+        $buffer{'mute'}     = substr($value[1],6);
+        
     } else {
     
         Log3 $name, 3, "HEOSGroup ($name) - no match found";
@@ -455,6 +473,15 @@ sub HEOSGroup_GetGroupVolume($) {
     
     RemoveInternalTimer($hash,'HEOSGroup_GetGroupVolume');
     IOWrite($hash,'getGroupVolume',"gid=$hash->{GID}");
+    
+}
+
+sub HEOSGroup_GetGroupMute($) {
+
+    my $hash        = shift;
+    
+    RemoveInternalTimer($hash,'HEOSGroup_GetGroupMute');
+    IOWrite($hash,'getGroupMute',"gid=$hash->{GID}");
     
 }
 
