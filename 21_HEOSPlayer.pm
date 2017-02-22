@@ -38,7 +38,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
 
-my $version = "0.1.56";
+my $version = "0.1.57";
 
 
 
@@ -72,6 +72,7 @@ sub HEOSPlayer_Initialize($) {
     
     # Provider
     $hash->{SetFn}          = "HEOSPlayer_Set";
+    $hash->{GetFn}          = "HEOSPlayer_Get";
     $hash->{DefFn}          = "HEOSPlayer_Define";
     $hash->{UndefFn}        = "HEOSPlayer_Undef";
     $hash->{AttrFn}         = "HEOSPlayer_Attr";
@@ -410,17 +411,17 @@ sub HEOSPlayer_Set($$@) {
         $heosCmd    = 'getMusicSources';
         
     } elsif ( $cmd eq 'channel' ) {
-
-        return "usage: channel 1-$favcount" if( @args != 1 );
+    
         $favcount = scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );
+        return "usage: channel 1-$favcount" if( @args != 1 );
         
         $heosCmd    = 'playPresetStation';
         $action     = "preset=$args[0]";
         
-	} elsif( $cmd eq 'channelUp' ) {
-	
+    } elsif( $cmd eq 'channelUp' ) {
+
         return "usage: channelUp" if( @args != 0 );        
-        $favcount = scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );
+        #$favcount = scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );
         
         $heosCmd    = 'playPresetStation';
         my $fav = ReadingsVal($name,"channel", 0) + 1;
@@ -559,7 +560,7 @@ sub HEOSPlayer_Set($$@) {
         return "usage: savequeue" if( @args != 1 );
         
         $heosCmd    = 'saveQueue name';
-        $action = "name=$args[0]";
+        $action     = "name=$args[0]";
         
     #} elsif( $cmd eq 'sayText' ) {
     #	return "usage: sayText Text" if( @args != 1 );
@@ -570,7 +571,7 @@ sub HEOSPlayer_Set($$@) {
         my @inputs;
         my @media;
         
-        my  $list = "getPlayerInfo:noArg getPlayState:noArg getNowPlayingMedia:noArg getPlayMode:noArg play:noArg stop:noArg pause:noArg mute:on,off volume:slider,0,5,100 volumeUp:slider,0,1,10 volumeDown:slider,0,1,10 repeat:one,all,off shuffle:on,off clearqueue:noArg savequeue channelUp:noArg channelDown:noArg ";
+        my  $list = "getPlayerInfo:noArg getPlayState:noArg getNowPlayingMedia:noArg getPlayMode:noArg play:noArg stop:noArg pause:noArg mute:on,off volume:slider,0,5,100 volumeUp:slider,0,1,10 volumeDown:slider,0,1,10 repeat:one,all,off shuffle:on,off clearqueue:noArg savequeue channelUp:noArg channelDown:noArg next:noArg prev:noArg ";
         
         $list .= "groupWithMember:" . join( ",", devspec2array("TYPE=HEOSPlayer:FILTER=NAME!=$name") );
         
@@ -851,6 +852,11 @@ sub HEOSPlayer_PreProcessingReadings($$) {
     
         my @value               = split('&', $decode_json->{heos}{message});
         $buffer{'input'}   		= substr($value[1],6);
+        
+    } elsif ( $decode_json->{heos}{command} =~ /playback_error/ ) {
+
+        my @value               = split('&', $decode_json->{heos}{message});
+        $buffer{'error'}   		= substr($value[1],6);
         
     } else {
     

@@ -38,7 +38,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
 
-my $version = "0.1.56";
+my $version = "0.1.57";
 
 
 
@@ -218,11 +218,12 @@ sub HEOSGroup_Set($$@) {
     my ($hash, $name, @aa) = @_;
     my ($cmd, @args) = @aa;
     
-    my $gid     = $hash->{GID};
+    my $gid         = $hash->{GID};
     my $action;
     my $heosCmd;
     my $rvalue;
-    my $string  = "gid=$gid";
+    my $favcount    = 1;
+    my $string      = "gid=$gid";
 
 
     if( $cmd eq 'getGroupInfo' ) {
@@ -233,7 +234,7 @@ sub HEOSGroup_Set($$@) {
     } elsif( $cmd eq 'mute' ) {
         return "usage: mute on/off" if( @args != 1 );
         
-        $heosCmd    = 'setMute';
+        $heosCmd    = 'setGroupMute';
         $action     = "state=$args[0]";
         
     } elsif( $cmd eq 'volume' ) {
@@ -254,16 +255,116 @@ sub HEOSGroup_Set($$@) {
         $heosCmd    = 'groupVolumeDown';
         $action     = "step=$args[0]";
 
+    } elsif( $cmd eq 'clearGroup' ) {
+        return "usage: clearGroup" if( @args != 0 );
+        
+        $heosCmd    = 'createGroup';
+        $string     = "pid=$gid";
+
+    #ab hier Playerbefehle emuliert
+    } elsif( $cmd eq 'play' ) {
+        return "usage: play" if( @args != 0 );
+ 
+        $heosCmd    = 'setPlayState';
+        $action     = "state=$cmd";
+
+    } elsif( $cmd eq 'stop' ) {
+        return "usage: stop" if( @args != 0 );
+ 
+        $heosCmd    = 'setPlayState';
+        $action     = "state=$cmd";
+        $string     = "pid=$gid";
+ 
+    } elsif( $cmd eq 'pause' ) {
+        return "usage: pause" if( @args != 0 );
+
+        $heosCmd    = 'setPlayState';
+        $action     = "state=$cmd";
+        $string     = "pid=$gid";
+ 
+    } elsif( $cmd eq 'next' ) {
+
+        return "usage: next" if( @args != 0 );        
+        $heosCmd    = 'playNext';        
+        $string     = "pid=$gid";
+
+    } elsif( $cmd eq 'prev' ) {
+        return "usage: prev" if( @args != 0 );        
+        
+        $heosCmd    = 'playPrev';
+        $string     = "pid=$gid";
+        
+    } elsif ( $cmd eq 'channel' ) {
+
+        $favcount = scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );        
+        return "usage: channel 1-$favcount" if( @args != 1 );
+ 
+        $heosCmd    = 'playPresetStation';
+        $action     = "preset=$args[0]";
+        $string     = "pid=$gid";
+ 
+    } elsif( $cmd eq 'channelUp' ) {
+
+        return "usage: channelUp" if( @args != 0 );        
+        $favcount = scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );
+ 
+        $heosCmd    = 'playPresetStation';
+        my $fav = ReadingsVal($name,"channel", 0) + 1;
+        $fav = $favcount if ( $fav > $favcount);
+        $action     = "preset=".$fav;
+        $string     = "pid=$gid";
+ 
+    } elsif( $cmd eq 'channelDown' ) {
+
+        return "usage: channelDown" if( @args != 0 );
+
+        $heosCmd    = 'playPresetStation';
+        my $fav = ReadingsVal($name,"channel", 0) - 1;
+        $fav = 1 if ($fav <= 0);
+        $action     = "preset=".$fav;
+        $string     = "pid=$gid";
+ 
+    } elsif ( $cmd eq 'playlist' ) {
+
+        my @cids =  map { $_->{cid} } grep { $_->{name} =~ /$args[0]/i } (@{ $hash->{IODev}{helper}{playlists} });
+ 
+        if ( scalar @args == 1 && scalar @cids == 1 ) {
+ 
+            $heosCmd    = 'playPlaylist';
+            $action     = "sid=1025&cid=$cids[0]&aid=4";	
+            $string     = "pid=$gid";
+ 
+        } else {
+ 
+            my @playlists = map { $_->{name} } (@{ $hash->{IODev}{helper}{playlists}});				
+            return "usage: playlist ".join(",",@playlists); 
+
+        }
+
     } else {
-        my  $list = "getGroupInfo:noArg mute:on,off volume:slider,0,5,100 volumeUp:slider,0,1,10 volumeDown:slider,0,1,10";
+
+        my @playlists;
+        my  $list = "getGroupInfo:noArg mute:on,off volume:slider,0,5,100 volumeUp:slider,0,1,10 volumeDown:slider,0,1,10 clearGroup:noArg play:noArg stop:noArg pause:noArg next:noArg prev:noArg channelUp:noArg channelDown:noArg ";
+
+        $list .= " channel:slider,1,1,".scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );		
+
+        if ( defined $hash->{IODev}{helper}{playlists} ) {
+     
+            @playlists = map { my %n; $n{name} = $_->{name}; $n{name} =~ s/\s+/\&nbsp;/g; $n{name} } (@{ $hash->{IODev}{helper}{playlists}});
+            $list .= " playlist:".join(",",@playlists) if( scalar @playlists > 0 );
+        }
+        
         return "Unknown argument $cmd, choose one of $list";
     }
-    
-    
-    $string     .= "&$action" if( defined($action));
-    
-    IOWrite($hash,"$heosCmd","$string");
-    Log3 $name, 4, "HEOSGroup ($name) - IOWrite: $heosCmd $string IODevHash=$hash->{IODev}";
+
+
+    #senden von Befehlen unterdrücken solange state nicht on ist
+    if ( ReadingsVal($name, "state", "off") eq "on" ) {
+        $string     .= "&$action" if( defined($action));
+
+        IOWrite($hash,"$heosCmd","$string");
+        Log3 $name, 4, "HEOSGroup ($name) - IOWrite: $heosCmd $string IODevHash=$hash->{IODev}";
+    }
     
     return undef;
 }
@@ -290,9 +391,13 @@ sub HEOSGroup_Parse($$) {
         $code           = $io_hash->{NAME} ."-". $code if( defined($io_hash->{NAME}) );
     
     
+        #print "code #######################################################################\n".Dumper($code);
+    
         if( my $hash    = $modules{HEOSGroup}{defptr}{$code} ) {
         
             my $name    = $hash->{NAME};
+            
+            #print "hash #######################################################################\n".Dumper($hash);
             
             IOWrite($hash,'getGroupInfo',"gid=$hash->{GID}");
             Log3 $name, 4, "HEOSGroup ($name) - find logical device: $hash->{NAME}";
@@ -315,8 +420,9 @@ sub HEOSGroup_Parse($$) {
         if( defined($decode_json->{payload}{gid}) ) {
             $gid        = $decode_json->{payload}{gid};
             
-        } elsif ( $decode_json->{heos}{message} =~ /^gid=/ ) {
+        } elsif ( $decode_json->{heos}{message} =~ /^gid=/ or $decode_json->{heos}{message} =~ /^pid=/ ) {      # das mit dem PID wird nicht klappen, da solche Telegramme erst gar nicht an das Groupmodul gesendet werden
         
+            #pid wird bei leerer gruppe zurück gegeben
             my @gid     = split('&', $decode_json->{heos}{message});
             $gid        = substr($gid[0],4);
             Log3 $name, 4, "HEOSGroup ($name) - gid[0]: $gid[0] and gid: $gid";
@@ -347,6 +453,9 @@ sub HEOSGroup_WriteReadings($$) {
     my ($hash,$decode_json)     = @_;
     my $name                    = $hash->{NAME};
     
+    my $leaderchannel;
+    my $leaderStation;
+    my $leaderStatus;
     
     Log3 $name, 3, "HEOSGroup ($name) - processing data to write readings";
     
@@ -358,6 +467,21 @@ sub HEOSGroup_WriteReadings($$) {
     
     my $readingsHash    = HEOSGroup_PreProcessingReadings($hash,$decode_json)
     if( $decode_json->{heos}{message} =~ /^gid=/ );
+    
+    my $code        = abs($hash->{GID});
+    $code           = $hash->{IODev}{NAME} ."-". $code if( defined($hash->{IODev}{NAME}) );
+    #print "code #######################################################################\n".Dumper($code);
+
+    if( my $leaderhash    = $modules{HEOSPlayer}{defptr}{$code} ) {
+        
+        my $leadername    = $leaderhash->{NAME};
+        #print "hash #######################################################################\n".Dumper($leaderhash);		
+        $leaderchannel = ReadingsVal($leadername, 'channel', '');
+        $leaderStation = ReadingsVal($leadername, 'currentStation', '');
+        $leaderStatus  = ReadingsVal($leadername, 'playStatus', 'stop');
+
+        Log3 $name, 4, "HEOSGroup ($name) - read readings from $leadername";
+    }
     
     
     ############################
@@ -385,31 +509,42 @@ sub HEOSGroup_WriteReadings($$) {
     readingsBulkUpdate( $hash, 'name', $decode_json->{payload}{name} );
     readingsBulkUpdate( $hash, 'gid', $decode_json->{payload}{gid} );
     
+    readingsBulkUpdate( $hash, 'state', 'on' );
 
-    my @members;
+    readingsBulkUpdate( $hash, 'channel', $leaderchannel );
+    readingsBulkUpdate( $hash, 'currentStation', $leaderStation );
+    readingsBulkUpdate( $hash, 'playStatus', $leaderStatus );
+    
+    #gruppe wurde geleert	
+    if ( $decode_json->{heos}{message} =~ /^pid=/ ) {
 
-    if( ref($decode_json->{payload}{players}) eq "ARRAY" ) {
+        readingsBulkUpdate( $hash, 'member', "" );
+        readingsBulkUpdate( $hash, 'name', "" );		   
+        readingsBulkUpdate( $hash, 'state', "off" );
+
+    } elsif ( ref($decode_json->{payload}{players}) eq "ARRAY" ) {
+
+        my @members;
+
         foreach my $player (@{ $decode_json->{payload}{players} }) {
-        
+
             readingsBulkUpdate( $hash, 'leader', $player->{name} ) if ( $player->{role} eq "leader" );
             push( @members, $player->{name}) if ( $player->{role} eq "member" );
-            print"Player ###################################\n".Dumper($player);
+
         }
+
+        if ( scalar @members > 1 ) {
+
+            readingsBulkUpdate( $hash, 'member', join(",",@members) );		
+
+        } else {
+
+            readingsBulkUpdate( $hash, 'member', $members[0] );
+
+        }
+
     }
-    
-    if( scalar @members > 1 ) {
-    
-        readingsBulkUpdate( $hash, 'member', join(",",@members) );
-        
-    } else {
-    
-        readingsBulkUpdate( $hash, 'member', $members[0] );
-    }
-    
-    print"Member ##################################\n".Dumper(@members);
-    
-    
-    readingsBulkUpdate( $hash, 'state', 'on' );
+
     readingsEndUpdate( $hash, 1 );
     
     Log3 $name, 5, "HEOSGroup ($name) - readings set for $name";

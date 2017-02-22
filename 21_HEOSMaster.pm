@@ -50,7 +50,7 @@ use Encode qw(encode_utf8);
 use Net::Telnet;
 
 
-my $version = "0.1.56";
+my $version = "0.1.57";
 
 
 my %heosCmds = (
@@ -60,17 +60,17 @@ my %heosCmds = (
     'signAccountOut'            => 'system/sign_out',
     'reboot'                    => 'system/reboot',
     'getMusicSources'           => 'browse/get_music_sources',
-	'browseSource'              => 'browse/browse?',
+    'browseSource'              => 'browse/browse?',
     'getPlayers'                => 'player/get_players',
     'getGroups'                 => 'group/get_groups',
     'getPlayerInfo'             => 'player/get_player_info?',
     'getGroupInfo'              => 'group/get_group_info?',
     'getPlayState'              => 'player/get_play_state?',
     'getPlayMode'               => 'player/get_play_mode?',
-    'getMute'                   => 'player/get_mute?'
+    'getMute'                   => 'player/get_mute?',
     'getGroupMute'              => 'group/get_mute?',
     'clearQueue'                => 'player/clear_queue?',
-	'saveQueue'                 => 'player/save_queue?',
+    'saveQueue'                 => 'player/save_queue?',
     'getVolume'                 => 'player/get_volume?',
     'getGroupVolume'            => 'group/get_volume?',
     'setPlayState'              => 'player/set_play_state?',
@@ -352,7 +352,7 @@ sub HEOSMaster_Open($) {
     my $host        = $hash->{HOST};
     my $port        = 1255;
     my $timeout     = 0.1;
-    my $user        = AttrVal($name,'heosUsername',0);
+    my $user        = AttrVal($name,'heosUsername',undef);
     my $password    = HEOSMaster_ReadPassword($hash);
     
     
@@ -549,6 +549,11 @@ sub HEOSMaster_ResponseProcessing($$) {
     unless(ref($decode_json) eq "HASH");
 
 
+    #wenn noch in Bearbeitung dann message ignorieren
+    return Log3 $name, 3, "HEOSMaster ($name) - heos worked"        # Konnte nicht genau erkennen ob Du es so haben wolltest. Anders macht es aber auch keinen Sinn
+    if( defined($decode_json->{heos}{message}) && $decode_json->{heos}{message} =~ /command\sunder\sprocess/ );
+
+    
     if( (defined($decode_json->{heos}{result}) and defined($decode_json->{heos}{command})) or ($decode_json->{heos}{command} =~ /^system/) ) {
     
         HEOSMaster_WriteReadings($hash,$decode_json);
@@ -615,12 +620,10 @@ sub HEOSMaster_ResponseProcessing($$) {
             
                 #Favoriten einlesen
                 $hash->{helper}{favorites} = $decode_json->{payload};
-                my @keys = (keys %defs);				
-                my @pids =  map { $_->{PID} } grep { $_->{TYPE} =~ /HEOSPlayer/i } @defs{@keys};
             
                 #Nachricht an die Player das die Favoriten sich geändert haben
-                foreach my $pid (@pids) {
-                
+                foreach my $dev ( devspec2array("TYPE=HEOSPlayer") ) {
+                    my $pid = $defs{$dev}->{PID};
                     $json  =    '{"heos": {"command": "event/favorites_changed", "message": "pid='.$pid.'"}}';
                     Dispatch($hash,$json,undef);
                     Log3 $name, 4, "HEOSMaster ($name) - call Dispatcher for Favorites Changed";
@@ -701,13 +704,11 @@ sub HEOSMaster_ResponseProcessing($$) {
     if( $decode_json->{heos}{command} =~ /^player/ or $decode_json->{heos}{command} =~ /^event\/player/ or $decode_json->{heos}{command} =~ /^group/ or $decode_json->{heos}{command} =~ /^event\/group/ or $decode_json->{heos}{command} =~ /^event\/repeat_mode_changed/ or $decode_json->{heos}{command} =~ /^event\/shuffle_mode_changed/ ) {
     
         if( ref($decode_json->{payload}) eq "ARRAY" ) {
-        
-            return Log3 $name, 4, "HEOSMaster ($name) - empty ARRAY received"
-            unless(scalar(@{$decode_json->{payload}}) > 0);
-    
             if( $decode_json->{heos}{command} =~ /^player/ ) {
 
-        
+                return Log3 $name, 4, "HEOSMaster ($name) - empty ARRAY received"
+                unless(scalar(@{$decode_json->{payload}}) > 0);
+                
                 foreach my $payload (@{$decode_json->{payload}}) {
             
                     $json  =    '{"pid": "';
@@ -723,14 +724,24 @@ sub HEOSMaster_ResponseProcessing($$) {
             } elsif( $decode_json->{heos}{command} =~ /^group/ ) {
         
         
-                foreach my $payload (@{$decode_json->{payload}}) {
-            
-                    $json  =    '{"gid": "';
-                    $json .=    "$payload->{gid}";
-                    $json .=    '","heos": {"command": "group/get_groups"}}';
+                unless ( scalar(@{$decode_json->{payload}}) > 0 ) {
+                    #alle gruppen ausschalten da leer
+                    foreach my $dev ( devspec2array("TYPE=HEOSGroup") ) {
+                    
+                        my $ghash = $defs{$dev};
+                        readingsSingleUpdate( $ghash, "state", "off", 1 );
+                    }
+                } else {
 
-                    Dispatch($hash,$json,undef);
-                    Log3 $name, 4, "HEOSMaster ($name) - call Dispatcher for Groups";
+                    foreach my $payload (@{$decode_json->{payload}}) {
+
+                        $json  =    '{"gid": "';
+                        $json .=    "$payload->{gid}";
+                        $json .=    '","heos": {"command": "group/get_groups"}}';
+
+                        Dispatch($hash,$json,undef);
+                        Log3 $name, 4, "HEOSMaster ($name) - call Dispatcher for Groups";
+                    }
                 }
             
                 return;
