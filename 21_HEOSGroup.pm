@@ -36,7 +36,7 @@ use warnings;
 use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
-my $version = "0.1.61";
+my $version = "0.1.62";
 
 # Declare functions
 sub HEOSGroup_Initialize($);
@@ -216,7 +216,8 @@ sub HEOSGroup_Notify($$) {
     return if( !$events );
     readingsBeginUpdate($hash);
 
-    my %playerEevents = map { my ( $key, $value ) = split /:\s/; $value =~ s/^\s+//; ( $key, $value ) } @$events;
+    #my %playerEevents = map { my ( $key, $value ) = split /:\s/; $value =~ s/^\s+//; ( $key, $value ) } @$events;
+    my %playerEevents = map { my ( $key, $value ) = split /:\s/; ( $key, $value ) } @$events; 
 	
     foreach my $key ( keys %playerEevents ) {
     

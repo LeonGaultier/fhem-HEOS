@@ -37,7 +37,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 use Data::Dumper;
 
-my $version = "0.1.61";
+my $version = "0.1.62";
 
 # Declare functions
 sub HEOSPlayer_Initialize($);
@@ -272,7 +272,7 @@ sub HEOSPlayer_Set($$@) {
     my $rvalue;
     my $favoritcount = 1;
     my $qcount = 1;
-    my $string = '';
+    my $string = "pid=$pid";
 
     
     #print "cmd ###################################################\n".Dumper($cmd);
@@ -358,7 +358,7 @@ sub HEOSPlayer_Set($$@) {
     } elsif( $cmd eq 'groupWithMember' ) {
         return "usage: groupWithMember" if( @args != 1 );
         
-        $pid       .= ",$defs{$args[0]}->{PID}";
+        $string    .= ",$defs{$args[0]}->{PID}";
         $heosCmd    = 'createGroup';
         
     } elsif( $cmd eq 'clearGroup' ) {
@@ -623,8 +623,7 @@ sub HEOSPlayer_Set($$@) {
         return "Unknown argument $cmd, choose one of $list";
     }
     
-    
-    $string     .= "pid=$pid";
+
     $string     .= "&$action" if( defined($action));
     IOWrite($hash,"$heosCmd","$string");
     Log3 $name, 4, "HEOSPlayer ($name) - IOWrite: $heosCmd $string IODevHash=$hash->{IODev}";
