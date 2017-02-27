@@ -37,7 +37,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 use Data::Dumper;
 
-my $version = "0.1.60";
+my $version = "0.1.61";
 
 # Declare functions
 sub HEOSPlayer_Initialize($);
@@ -807,7 +807,7 @@ sub HEOSPlayer_PreProcessingReadings($$) {
     
         $buffer{'shuffle'}  = $message{shuffle};
         $buffer{'repeat'}   = $message{repeat};
-        $buffer{'repeat'}   ==~ s/.*\_(.*)/$1/g;
+        $buffer{'repeat'}   =~ s/.*\_(.*)/$1/g;
         
     } elsif ( $decode_json->{heos}{command} =~ /get_mute/ ) {
     
