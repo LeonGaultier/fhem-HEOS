@@ -36,7 +36,7 @@ use warnings;
 use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
-my $version = "0.1.62";
+my $version = "0.1.63";
 
 # Declare functions
 sub HEOSGroup_Initialize($);

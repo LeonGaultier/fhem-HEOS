@@ -47,7 +47,7 @@ use Encode qw(encode_utf8);
 use Net::Telnet;
 use Data::Dumper;
 
-my $version = "0.1.62";
+my $version = "0.1.63";
 
 my %heosCmds = (
     'enableChangeEvents'        => 'system/register_for_change_events?enable=',

@@ -37,7 +37,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 use Data::Dumper;
 
-my $version = "0.1.62";
+my $version = "0.1.63";
 
 # Declare functions
 sub HEOSPlayer_Initialize($);
@@ -358,7 +358,12 @@ sub HEOSPlayer_Set($$@) {
     } elsif( $cmd eq 'groupWithMember' ) {
         return "usage: groupWithMember" if( @args != 1 );
         
-        $string    .= ",$defs{$args[0]}->{PID}";
+        foreach ( split('\,', $args[0]) ) {
+        
+            $string    .= ",$defs{$_}->{PID}";
+            printf "String: $string\n";
+        }
+        
         $heosCmd    = 'createGroup';
         
     } elsif( $cmd eq 'clearGroup' ) {
@@ -591,7 +596,8 @@ sub HEOSPlayer_Set($$@) {
         my $sid = ReadingsVal($name,".input", "9999");
         my  $list = "getPlayerInfo:noArg getPlayState:noArg getNowPlayingMedia:noArg getPlayMode:noArg play:noArg stop:noArg pause:noArg mute:on,off volume:slider,0,5,100 volumeUp:slider,0,1,10 volumeDown:slider,0,1,10 repeat:one,all,off shuffle:on,off channelUp:noArg channelDown:noArg next:noArg prev:noArg history:track,channel ";
 
-        $list .= "groupWithMember:" . join( ",", devspec2array("TYPE=HEOSPlayer:FILTER=NAME!=$name") );
+        #$list .= "groupWithMember:" . join( ",", devspec2array("TYPE=HEOSPlayer:FILTER=NAME!=$name") );
+        $list .= "groupWithMember:multiple-strict," . join( ",", devspec2array("TYPE=HEOSPlayer:FILTER=NAME!=$name") );
         #Parameterlisten für FHEMWeb zusammen bauen
         $list .= " channel:slider,1,1,".scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );
         #$list .= " playQueue:slider,1,1,".scalar(@{$hash->{helper}{queue}}) if ( defined $hash->{helper}{queue} );
