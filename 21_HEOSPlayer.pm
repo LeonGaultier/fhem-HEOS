@@ -667,7 +667,9 @@ sub HEOSPlayer_Parse($$) {
 
         $pid = $message{pid} if( defined($message{pid}) );
         $pid = $decode_json->{payload}{pid} if( defined($decode_json->{payload}{pid}) );
+        
         Log3 $name, 4, "HEOSPlayer ($name) PID: $pid";
+        
         $code           = abs($pid);
         $code           = $io_hash->{NAME} ."-". $code if( defined($io_hash->{NAME}) );
         
