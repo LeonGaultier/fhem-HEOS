@@ -36,7 +36,11 @@ use warnings;
 use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
-my $version = "0.1.63";
+
+my $version = "0.1.68";
+
+
+
 
 # Declare functions
 sub HEOSGroup_Initialize($);
@@ -51,6 +55,9 @@ sub HEOSGroup_PreProcessingReadings($$);
 sub HEOSGroup_GetGroupInfo($);
 sub HEOSGroup_GetGroupVolume($);
 sub HEOSGroup_GetGroupMute($);
+
+
+
 
 sub HEOSGroup_Initialize($) {
     
@@ -100,7 +107,7 @@ sub HEOSGroup_Define($$) {
     return "too few parameters: define <name> HEOSGroup <gid>" if( @a < 2 );
 
     my ($name,$gid)     = @a;
-	
+
     $hash->{GID}        = $gid;
     $hash->{VERSION}    = $version;
     $hash->{NOTIFYDEV} = "HEOSPlayer".abs($gid);
@@ -117,7 +124,7 @@ sub HEOSGroup_Define($$) {
     
     $iodev = $hash->{IODev}->{NAME};
     my $code = abs($gid);
-	
+
     $code = $iodev."-".$code if( defined($iodev) );
     my $d = $modules{HEOSGroup}{defptr}{$code};
     
@@ -218,7 +225,7 @@ sub HEOSGroup_Notify($$) {
 
     #my %playerEevents = map { my ( $key, $value ) = split /:\s/; $value =~ s/^\s+//; ( $key, $value ) } @$events;
     my %playerEevents = map { my ( $key, $value ) = split /:\s/; ( $key, $value ) } @$events; 
-	
+
     foreach my $key ( keys %playerEevents ) {
     
         #### playing Infos
@@ -236,7 +243,7 @@ sub HEOSGroup_Set($$@) {
     my $action;
     my $heosCmd;
     my $rvalue;
-	my $favorit;
+    my $favorit;
     my $favoritcount = 1;
     my $string       = "gid=$gid";
 
@@ -410,7 +417,7 @@ sub HEOSGroup_Parse($$) {
 
     if( defined($decode_json->{gid}) ) {
     
-		$gid            = $decode_json->{gid};
+        $gid            = $decode_json->{gid};
         $code           = abs($gid);
         $code           = $io_hash->{NAME} ."-". $code if( defined($io_hash->{NAME}) );
         
@@ -491,7 +498,7 @@ sub HEOSGroup_WriteReadings($$) {
     if ( ref($decode_json->{payload}{players}) eq "ARRAY" ) {
     
         my @members;
-		
+
         foreach my $player (@{ $decode_json->{payload}{players} }) {
         
             readingsBulkUpdate( $hash, 'leader', $player->{name} ) if ( $player->{role} eq "leader" );
@@ -523,21 +530,21 @@ sub HEOSGroup_PreProcessingReadings($$) {
     my $name                  = $hash->{NAME};
     my $reading;
     my %buffer;
-	my %message  = map { my ( $key, $value ) = split "="; $key => $value } split('&', $decode_json->{heos}{message});
-	
-	
+    my %message  = map { my ( $key, $value ) = split "="; $key => $value } split('&', $decode_json->{heos}{message});
+
+
     Log3 $name, 4, "HEOSGroup ($name) - preprocessing readings";
     if ( $decode_json->{heos}{command} =~ /volume_changed/ or $decode_json->{heos}{command} =~ /set_volume/ or $decode_json->{heos}{command} =~ /get_volume/ ) {
     
         my @value             = split('&', $decode_json->{heos}{message});
-		
+
         $buffer{'volume'}     = substr($value[1],6);
         $buffer{'mute'}       = substr($value[2],5) if( $decode_json->{heos}{command} =~ /volume_changed/ );
         
     } elsif ( $decode_json->{heos}{command} =~ /volume_up/ or $decode_json->{heos}{command} =~ /volume_down/ ) {
     
         my @value             = split('&', $decode_json->{heos}{message});
-		
+
         $buffer{'volumeUp'}   = substr($value[1],5) if( $decode_json->{heos}{command} =~ /volume_up/ );
         $buffer{'volumeDown'} = substr($value[1],5) if( $decode_json->{heos}{command} =~ /volume_down/ );
         
