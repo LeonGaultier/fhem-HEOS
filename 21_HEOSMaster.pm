@@ -54,7 +54,7 @@ eval "use IO::Socket::Multicast;1" or $missingModulNet .= "IO::Socket::Multicast
 
 
 
-my $version = "0.1.68";
+my $version = "0.1.70";
 
 my %heosCmds = (
     'enableChangeEvents'        => 'system/register_for_change_events?enable=',
@@ -135,7 +135,7 @@ sub HEOSMaster_GetMusicSources($);
 sub HEOSMaster_GetPlaylists($);
 sub HEOSMaster_GetServers($);
 sub HEOSMaster_Hexdump;
-sub HEOSMaster_MakePlayLink($$$$)
+sub HEOSMaster_MakePlayLink($$$$);
 
 
 

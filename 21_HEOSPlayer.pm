@@ -38,7 +38,7 @@ use Encode qw(encode_utf8);
 use URI::Escape;
 use Data::Dumper;
 
-my $version = "0.1.68";
+my $version = "0.1.70";
 
 
 
@@ -54,7 +54,7 @@ sub HEOSPlayer_Set($$@);
 sub HEOSPlayer_PreProcessingReadings($$);
 sub HEOSPlayer_GetPlayerInfo($);
 sub HEOSPlayer_GetPlayState($);
-sub HEOSPlayer_GetQueue($)
+sub HEOSPlayer_GetQueue($);
 sub HEOSPlayer_GetNowPlayingMedia($);
 sub HEOSPlayer_GetPlayMode($);
 sub HEOSPlayer_GetVolume($);
