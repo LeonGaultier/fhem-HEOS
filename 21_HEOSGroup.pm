@@ -37,7 +37,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
 
-my $version = "0.1.70";
+my $version = "0.1.71";
 
 
 
@@ -218,12 +218,9 @@ sub HEOSGroup_Notify($$) {
 
     my $events = deviceEvents($dev,1);
 
-    #print "notify ####################################################\n".Dumper($events);
-
     return if( !$events );
     readingsBeginUpdate($hash);
 
-    #my %playerEevents = map { my ( $key, $value ) = split /:\s/; $value =~ s/^\s+//; ( $key, $value ) } @$events;
     my %playerEevents = map { my ( $key, $value ) = split /:\s/; ( $key, $value ) } @$events; 
 
     foreach my $key ( keys %playerEevents ) {
@@ -263,19 +260,19 @@ sub HEOSGroup_Set($$@) {
         $action     = "state=$args[0]";
         
     } elsif( $cmd eq 'volume' ) {
-        return "usage: volume 0-100" if( @args != 1 );
+        return "usage: volume 0-100" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > 100 || $args[0] < 0 );
         
         $heosCmd    = 'setGroupVolume';
         $action     = "level=$args[0]";
         
     } elsif( $cmd eq 'volumeUp' ) {
-        return "usage: volumeUp 0-10" if( @args != 1 );
+        return "usage: volumeUp 0-10" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > 10 || $args[0] < 0 );
         
         $heosCmd    = 'GroupVolumeUp';
         $action     = "step=$args[0]";
         
     } elsif( $cmd eq 'volumeDown' ) {
-        return "usage: volumeDown 0-10" if( @args != 1 );
+        return "usage: volumeDown 0-10" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > 10 || $args[0] < 0 );
         
         $heosCmd    = 'groupVolumeDown';
         $action     = "step=$args[0]";
@@ -286,7 +283,7 @@ sub HEOSGroup_Set($$@) {
         $heosCmd    = 'createGroup';
         $string     = "pid=$gid";
         
-    } elsif( grep { $_ =~ /\Q$cmd\E/ } ("play", "stop", "pause", "next", "prev", "channel", "channelUp", "channelDown", "playlist" ) ) {
+    } elsif( grep { $_ eq $cmd } ("play", "stop", "pause", "next", "prev", "channel", "channelUp", "channelDown", "playlist" ) ) {
         
         #ab hier Playerbefehle emuliert
         $string     = "pid=$gid";
@@ -334,34 +331,57 @@ sub HEOSGroup_Set($$@) {
             
             $heosCmd    = 'playPrev';
             
-        } elsif ( $cmd eq 'channel' ) {
-            
-            $favoritcount = scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );
-            return "usage: channel 1-$favoritcount" if( @args != 1 );
-            
-            $heosCmd    = 'playPresetStation';
-            $action     = "preset=$args[0]";
-            
-        } elsif( $cmd eq 'channelUp' ) {
-            return "usage: channelUp" if( @args != 0 );
+        } elsif ( $cmd =~ /channel/ ) {
+
+            my $favorit = ReadingsVal($name,"channel", 1);
             
             $favoritcount = scalar(@{$hash->{IODev}{helper}{favorites}}) if ( defined $hash->{IODev}{helper}{favorites} );
             $heosCmd    = 'playPresetStation';
-            $favorit = ReadingsVal($name,"channel", 0) + 1;
-            $favorit = $favoritcount if ( $favorit > $favoritcount);
-            $action     = "preset=".$favorit;
             
-        } elsif( $cmd eq 'channelDown' ) {
-            return "usage: channelDown" if( @args != 0 );
-            
-            $heosCmd    = 'playPresetStation';
-            $favorit = ReadingsVal($name,"channel", 0) - 1;
-            $favorit = 1 if ($favorit <= 0);
-            $action     = "preset=".$favorit;
+            if ( $cmd eq 'channel' ) {
+                return "usage: $cmd 1-$favoritcount" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > $favoritcount || $args[0] < 1);
+
+                $action  = "preset=$args[0]";
+
+            } elsif( $cmd eq 'channelUp' ) {
+                return "usage: $cmd" if( @args != 0 );
+
+                ++$favorit;
+                if ( $favorit > $favoritcount ) {
+                    if ( AttrVal($name, 'channelring', 0) == 1 ) {
+                    
+                        $favorit = 1;
+                        
+                    } else {
+                    
+                        $favorit = $favoritcount;
+                        
+                    }
+                }
+                
+                $action  = "preset=".$favorit;
+
+            } elsif( $cmd eq 'channelDown' ) {
+                return "usage: $cmd" if( @args != 0 );
+
+                --$favorit;
+                if ( $favorit <= 0 ) {
+                    if ( AttrVal($name, 'channelring', 0) == 1 ) {
+                    
+                        $favorit = $favoritcount;
+                        
+                    } else {
+                    
+                        $favorit = 1;
+                    }
+                }
+                
+                $action  = "preset=".$favorit;
+            }
             
         } elsif ( $cmd =~ /Playlist/ ) {
         
-            my @cids =  map { $_->{cid} } grep { $_->{name} =~ /$args[0]/i } (@{ $hash->{IODev}{helper}{playlists} });
+            my @cids =  map { $_->{cid} } grep { $_->{name} =~ /\Q$args[0]\E/i } (@{ $hash->{IODev}{helper}{playlists} });
 
             if ( scalar @args == 1 && scalar @cids > 0 ) {
                 if ( $cmd eq 'playPlaylist' ) {
@@ -468,7 +488,7 @@ sub HEOSGroup_WriteReadings($$) {
     my $name                    = $hash->{NAME};
 
     
-    Log3 $name, 3, "HEOSGroup ($name) - processing data to write readings";
+    Log3 $name, 4, "HEOSGroup ($name) - processing data to write readings";
     ############################
     #### Aufbereiten der Daten soweit nötig (bei Events zum Beispiel)
     my $readingsHash    = HEOSGroup_PreProcessingReadings($hash,$decode_json)
@@ -556,7 +576,7 @@ sub HEOSGroup_PreProcessingReadings($$) {
         
     } else {
     
-        Log3 $name, 3, "HEOSGroup ($name) - no match found";
+        Log3 $name, 4, "HEOSGroup ($name) - no match found";
         return undef;
     }
     

@@ -38,7 +38,7 @@ use Encode qw(encode_utf8);
 use URI::Escape;
 use Data::Dumper;
 
-my $version = "0.1.70";
+my $version = "0.1.71";
 
 
 
@@ -60,7 +60,6 @@ sub HEOSPlayer_GetPlayMode($);
 sub HEOSPlayer_GetVolume($);
 sub HEOSPlayer_Get($$@);
 sub HEOSPlayer_GetMute($);
-sub HEOSPlayer_Hexdump;
 
 
 
@@ -82,6 +81,7 @@ sub HEOSPlayer_Initialize($) {
     $hash->{AttrList}       = "IODev ".
                               "disable:1 ".
                               "mute2play:1 ".
+                              "channelring:1 ".
                               $readingFnAttributes;
 
     foreach my $d(sort keys %{$modules{HEOSPlayer}{defptr}}) {
@@ -149,6 +149,7 @@ sub HEOSPlayer_Define($$) {
         InternalTimer( gettimeofday()+int(rand(8)), "HEOSPlayer_GetPlayMode", $hash, 0 );
         InternalTimer( gettimeofday()+int(rand(10)), "HEOSPlayer_GetVolume", $hash, 0 );
         InternalTimer( gettimeofday()+int(rand(12)), "HEOSPlayer_GetMute", $hash, 0 );
+        InternalTimer( gettimeofday()+int(rand(14)), "HEOSPlayer_GetQueue", $hash, 0 );
         
    } else {
    
@@ -157,7 +158,8 @@ sub HEOSPlayer_Define($$) {
         InternalTimer( gettimeofday()+15+int(rand(6)), "HEOSPlayer_GetNowPlayingMedia", $hash, 0 );
         InternalTimer( gettimeofday()+15+int(rand(8)), "HEOSPlayer_GetPlayMode", $hash, 0 );
         InternalTimer( gettimeofday()+15+int(rand(10)), "HEOSPlayer_GetVolume", $hash, 0 );
-        InternalTimer( gettimeofday()+15+int(rand(12)), "HEOSPlayer_GetMute", $hash, 0 );    
+        InternalTimer( gettimeofday()+15+int(rand(12)), "HEOSPlayer_GetMute", $hash, 0 );
+        InternalTimer( gettimeofday()+15+int(rand(14)), "HEOSPlayer_GetQueue", $hash, 0 );
     }
     
     readingsBeginUpdate($hash);
@@ -242,60 +244,41 @@ sub HEOSPlayer_Get($$@) {
 
         if ( $param eq '' ) {
         
-            my $xcmd;
-            my $ret = "Quellen\n";
-            $ret .= sprintf( "%-35s %-15s %s\n", 'key', 'type', 'title' );
+            my $ret = "Musik\n";
+            #$ret .= sprintf( "%-35s %-15s %s\n", 'key', 'type', 'title' );
 
             foreach my $item (@{ $hash->{IODev}{helper}{sources}}) {
             
-                $xcmd = 'cmd'.uri_escape('=get '.$hash->{NAME}.' ls '.$item->{sid});
-                $xcmd = "FW_cmd('/fhem?XHR=1&$xcmd')";
-                $ret .= '<li style="list-style-type: none; display: inline;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", $item->{sid}, $item->{type}, $item->{name} )."</a></li>\n";
+                #$ret .= '<li style="list-style-type: none; display: inline;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", $item->{sid}, $item->{type}, $item->{name} )."</a></li>\n";
+                $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, $item->{sid}, $item->{type}, $item->{name});
             }
 
-            if ( defined $hash->{IODev}{helper}{playlists} ) {
-            
-                $xcmd = 'cmd'.uri_escape('=get '.$hash->{NAME}.' ls 1025');
-                $xcmd = "FW_cmd('/fhem?XHR=1&$xcmd')";
-                $ret .= '<li style="list-style-type: none; display: inline;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", '1025', "heos_service", "Playlist" )."</a></li>\n";
-            }
+            $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1025", "heos_service", "Playlist")
+            if ( defined $hash->{IODev}{helper}{playlists} );
+            #https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_playlists.png
 
-            if ( defined $hash->{IODev}{helper}{history} ) {
-            
-                $xcmd = 'cmd'.uri_escape('=get '.$hash->{NAME}.' ls 1026');
-                $xcmd = "FW_cmd('/fhem?XHR=1&$xcmd')";
-                $ret .= '<li style="list-style-type: none; display: inline;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", '1026', "heos_service", "Verlauf" )."</a></li>\n";
-            }
+            $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1026", "heos_service", "Verlauf")
+            if ( defined $hash->{IODev}{helper}{history} );
+            #https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_history.png
 
-            if ( defined $hash->{IODev}{helper}{aux} ) {
-            
-                $xcmd = 'cmd'.uri_escape('=get '.$hash->{NAME}.' ls 1027');
-                $xcmd = "FW_cmd('/fhem?XHR=1&$xcmd')";
-                $ret .= '<li style="list-style-type: none; display: inline;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", '1027', "heos_service", "Eingänge" )."</a></li>\n";
-            }
+            $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1027", "heos_service", "Eingänge")
+            if ( defined $hash->{IODev}{helper}{aux} );
+            #https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_aux.png
 
-            if ( defined $hash->{IODev}{helper}{favorites} ) {
-            
-                $xcmd = 'cmd'.uri_escape('=get '.$hash->{NAME}.' ls 1028');
-                $xcmd = "FW_cmd('/fhem?XHR=1&$xcmd')";
-                $ret .= '<li style="list-style-type: none; display: inline;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", '1028', "heos_service", "Favoriten" )."</a></li>\n";
-            }
+            $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1028", "heos_service", "Favoriten")
+            if ( defined $hash->{IODev}{helper}{favorites} );
+            #https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_favorites.png
 
-            if ( defined $hash->{helper}{queue} ) {
-            
-                $xcmd = 'cmd'.uri_escape('=get '.$hash->{NAME}.' ls 1029');
-                $xcmd = "FW_cmd('/fhem?XHR=1&$xcmd')";
-                $ret .= '<li style="list-style-type: none; display: inline;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", '1029', "heos_service", "Warteschlange" )."</a></li>\n";
-            }
+            $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1029", "heos_service", "Warteschlange")
+            if ( defined $hash->{helper}{queue} );
+            #https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_playlists.png
 
             $ret .= "\n\n";
             return $ret;
 
         } else {
 
-            my @path = split(",", $param);     
-            my $sid = $path[0] if ( scalar @path > 0); 
-            my $cid = $path[1] if ( scalar @path > 1);
+            my ($sid,$cid)=$param=~/^(-?\d+),?(.*)$/;
 
             $me->{cl}   = $hash->{CL} if( ref($hash->{CL}) eq 'HASH' );
             $me->{name} = $hash->{NAME};
@@ -330,7 +313,7 @@ sub HEOSPlayer_Get($$@) {
             my $heosCmd = "browseSource";
             my $action;
 
-            if ( defined $sid && defined $cid ) {
+            if ( defined $sid && defined $cid && $cid ne "" ) {
                 if ( $sid eq "1027" ) {
                 
                     $action = "sid=$cid";
@@ -347,6 +330,40 @@ sub HEOSPlayer_Get($$@) {
                     $action = "sid=$sid&cid=$cid";
                     
                 }
+                
+            } elsif ( defined $sid && $sid eq "1029" ) {
+            
+                my $ret = "$hash->{NAME}/Warteschlange\n";
+                $ret .= sprintf( "%-35s %-15s %s\n", 'key', 'type', 'title' );
+
+                my $x = 0;
+                foreach my $item (@{ $hash->{helper}{queue}}) {
+                
+                    $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1029,".++$x, "heos_queue", $item->{song} );
+                }
+                
+                $ret .= "\n\n";
+
+                if( $me->{cl}->{TYPE} eq 'FHEMWEB' ) {
+
+                    $ret =~ s/&/&amp;/g;
+                    $ret =~ s/'/&apos;/g;
+                    $ret =~ s/\n/<br>/g;
+                    $ret = "<pre>$ret</pre>" if( $ret =~ m/  / );
+                    $ret = "<html>$ret</html>";
+
+                } else {
+
+                    $ret =~ s/<a[^>]*>//g;
+                    $ret =~ s/<\/a>//g;
+                    $ret =~ s/<img[^>]*>\n//g;
+                    $ret .= "\n";
+                }
+                
+                asyncOutput( $me->{cl}, $ret );
+                #delete $me;
+                return undef;
+                
             } else {
             
                 $action = "sid=$sid";
@@ -461,7 +478,7 @@ sub HEOSPlayer_Set($$@) {
         
         foreach ( split('\,', $args[0]) ) {
         
-            $string    .= ",$defs{$_}->{PID}";
+            $string    .= ",$defs{$_}->{PID}" if ( defined $defs{$_} );
             printf "String: $string\n";
         }
         
@@ -490,30 +507,52 @@ sub HEOSPlayer_Set($$@) {
         $heosCmd    = 'playPresetStation';
         
         if ( $cmd eq 'channel' ) {
-            return "usage: channel 1-$favoritcount" if( @args != 1 );
+            return "usage: channel 1-$favoritcount" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > $favoritcount || $args[0] < 1);
             
             $action  = "preset=$args[0]";
             
         } elsif( $cmd eq 'channelUp' ) {
             return "usage: $cmd" if( @args != 0 );
             
-            $favorit = $favoritcount if ( ++$favorit > $favoritcount );
+            ++$favorit;
+            if ( $favorit > $favoritcount ) {
+                if ( AttrVal($name, 'channelring', 0) == 1 ) {
+                
+                    $favorit = 1;
+                    
+                } else {
+                
+                    $favorit = $favoritcount;
+                }
+            }
+
             $action  = "preset=".$favorit;
             
         } elsif( $cmd eq 'channelDown' ) {
             return "usage: $cmd" if( @args != 0 );
 
-            $favorit = 1 if ( --$favorit <= 0 );
+            --$favorit;
+            if ( $favorit <= 0 ) {
+                if ( AttrVal($name, 'channelring', 0) == 1 ) {
+
+                    $favorit = $favoritcount;
+
+                } else {
+
+                    $favorit = 1;
+                }
+            }
+
             $action  = "preset=".$favorit;
         }
         
     } elsif ( $cmd =~ /Queue/ ) {
 
         $heosCmd    = $cmd;
-        if ( $cmd eq 'playQueue' ) {
+        if ( $cmd eq 'playQueueItem' ) {
                 
             $qcount = scalar(@{$hash->{helper}{queue}}) if ( defined $hash->{helper}{queue} );
-            return "usage: queue 1-$qcount" if( @args != 1 );
+            return "usage: queue 1-$qcount" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > $qcount || $args[0] < 1);
 
             $action     = "qid=$args[0]";
           
@@ -584,90 +623,86 @@ sub HEOSPlayer_Set($$@) {
         readingsSingleUpdate($hash, "input", $args[0], 1);
         
     } elsif( $cmd eq 'input' ) {
-        return 'usage: '.$cmd.' sid[,cid][,mid]' if( @args != 1 );
+        return "usage: $cmd sid[,cid][,mid]" if( @args != 1 );
 
         my $param = shift( @args );
-        my @path = split( ",", $param);     
-        my $sid = $path[0] if ( scalar @path > 0); 
-        my $cid = $path[1] if ( scalar @path > 1);
-        my $mid = $path[2] if ( scalar @path > 2); 
+        my ($sid,$cid,$mid)=$param=~/^(-?\d+),(.+?)(?:,(.*))?/;
 
-        if ( $sid =~ /^-*[0-9]+$/ ) {
-            if ( $sid eq "1024" ) {
-                return 'usage: '.$cmd.' sid,cid[,mid]' unless( defined($cid) && defined($mid) );
+        return "usage: $cmd sid[,cid][,mid]" unless( defined $sid || $sid eq "" );
+
+        if ( $sid eq "1024" ) {
+            return "usage: $cmd sid,cid[,mid]" unless( defined($cid) && defined($mid) );
+            
+            #Server abspielen
+            $heosCmd = 'playPlaylist';
+            $action  = "sid=$sid&cid=$cid&aid=4";
+            $action  = "sid=$sid&cid=$cid&mid=$mid&aid=4" if ( defined($mid) );
+
+        } elsif ( $sid eq "1025" ) {
+            return "usage: $cmd sid,cid[,mid]" unless( defined($cid) );
+
+            #Playlist abspielen
+            $heosCmd = 'playPlaylist';
+            $action  = "sid=$sid&cid=$cid&aid=4";
+            $action  = "sid=$sid&cid=$cid&mid=$mid&aid=4" if ( defined($mid) );
+
+        } elsif ( $sid eq "1026" ) {
+            return "usage: $cmd sid,cid,mid" unless( defined($cid) );
+
+            #Verlauf abspielen
+            if ( $cid eq "TRACKS" ) {
+
+                $heosCmd = 'playPlaylist';
+                $action  = "sid=$sid&cid=$cid&aid=4";
+                $action  = "sid=$sid&cid=$cid&mid=$mid&aid=4" if ( defined($mid) );
+
+            } elsif ( $cid eq "STATIONS" ) {
+
+                $heosCmd = 'playStream';
+                $action  = "sid=$sid&cid=$cid&mid=$mid";
+            }
+
+        } elsif ( $sid eq "1027" ) {
+            return "usage: $cmd sid,spid,mid" unless( defined($cid) );
+
+            #Eingang abspielen
+            $heosCmd = 'playInput';
+            $action  = "input=$mid";
+            $action  = "spid=$cid&".$action if ( $pid ne $cid );
+
+        } elsif ( $sid eq "1028" ) {
+            return "usage: $cmd sid,nr" unless( defined($cid) );
+
+            #Favoriten abspielen
+            $heosCmd = 'playPresetStation';
+            $action  = "preset=$cid";
+
+        } elsif ( $sid eq "1029" ) {
+            return "usage: $cmd sid,qid" unless( defined($cid) );
+
+            #Warteschlange abspielen
+            $heosCmd = 'playQueue';
+            $action  = "qid=$cid";
+
+        } else {
+            if ( $sid > 0 && $sid < 1024 ) {
+                return "usage: $cmd sid,cid,mid" unless( defined($cid) && defined($mid) );
+
+                #Radio abspielen
+                $heosCmd = 'playStream';
+                $action = "sid=$sid&cid=$cid&mid=$mid";
+
+            } else {
+                return "usage: $cmd sid,cid[,mid]" unless( defined($cid) );
                 
                 #Server abspielen
                 $heosCmd = 'playPlaylist';
                 $action  = "sid=$sid&cid=$cid&aid=4";
                 $action  = "sid=$sid&cid=$cid&mid=$mid&aid=4" if ( defined($mid) );
 
-            } elsif ( $sid eq "1025" ) {
-                return 'usage: '.$cmd.' sid,cid[,mid]' unless( defined($cid) );
-                
-                #Playlist abspielen
-                $heosCmd = 'playPlaylist';
-                $action  = "sid=$sid&cid=$cid&aid=4";
-                $action  = "sid=$sid&cid=$cid&mid=$mid&aid=4" if ( defined($mid) );
-
-            } elsif ( $sid eq "1026" ) {
-                return 'usage: '.$cmd.' sid,cid,mid' unless( defined($cid) );
-                
-                #Verlauf abspielen
-                if ( $cid eq "TRACKS" ) {
-                
-                    $heosCmd = 'playPlaylist';
-                    $action  = "sid=$sid&cid=$cid&aid=4";
-                    $action  = "sid=$sid&cid=$cid&mid=$mid&aid=4" if ( defined($mid) );
-                    
-                } elsif ( $cid eq "STATIONS" ) {
-                
-                    $heosCmd = 'playStream';
-                    $action  = "sid=$sid&cid=$cid&mid=$mid";
-                }
-
-            } elsif ( $sid eq "1027" ) {
-                return 'usage: '.$cmd.' sid,spid,mid' unless( defined($cid) );
-                
-                #Eingang abspielen
-                $heosCmd = 'playInput';
-                $action  = "input=$mid";
-                $action  = "spid=$cid&".$action if ( $pid ne $cid );
-
-            } elsif ( $sid eq "1028" ) {
-                return 'usage: '.$cmd.' sid,nr' unless( defined($cid) );    
-                
-                #Favoriten abspielen
-                $heosCmd = 'playPresetStation';
-                $action  = "preset=$cid";
-
-            } elsif ( $sid eq "1029" ) {
-                return 'usage: '.$cmd.' sid,qid' unless( defined($cid) );
-                
-                #Warteschlange abspielen
-                $heosCmd = 'playQueue';
-                $action  = "qid=$sid";
-                
-            } else {
-                if ( $sid > 0 && $sid < 30 ) {
-                    return 'usage: '.$cmd.' sid,cid,mid' unless( defined($cid) && defined($mid) );
-                    
-                    #Radio abspielen
-                    $heosCmd = 'playStream';
-                    $action = "sid=$sid&cid=$cid&mid=$mid";
-                    
-                } else {
-                    return 'usage: '.$cmd.' sid,cid[,mid]' unless( defined($cid) );
-                    
-                    #Server abspielen
-                    $heosCmd = 'playPlaylist';
-                    $action  = "sid=$sid&cid=$cid&aid=4";
-                    $action  = "sid=$sid&cid=$cid&mid=$mid&aid=4" if ( defined($mid) );
-                }
             }
-        } else {
-        
-            return 'usage: '.$cmd.' sid,cid[,mid]';
         }
+        
     } else {
                                               
         my  $list = "getPlayerInfo:noArg getPlayState:noArg getNowPlayingMedia:noArg getPlayMode:noArg play:noArg stop:noArg pause:noArg mute:on,off volume:slider,0,5,100 volumeUp:slider,0,1,10 volumeDown:slider,0,1,10 repeat:one,all,off shuffle:on,off next:noArg prev:noArg  input";
@@ -686,14 +721,14 @@ sub HEOSPlayer_Set($$@) {
 
         if ( defined($hash->{helper}{queue}) && ref($hash->{helper}{queue}) eq "ARRAY" && scalar(@{$hash->{helper}{queue}}) > 0 ) {
         
-            $list .= " playQueue:slider,1,1,".scalar(@{$hash->{helper}{queue}}) if ( defined $hash->{helper}{queue} );
+            $list .= " playQueueItem:slider,1,1,".scalar(@{$hash->{helper}{queue}}) if ( defined $hash->{helper}{queue} );
             $list .= " clearQueue:noArg saveQueue";            
         }
 
         if ( defined $hash->{IODev}{helper}{playlists} ) {
         
             my @playlists = map { my %n; $n{name} = $_->{name}; $n{name} =~ s/\s+/\&nbsp;/g; $n{name} } (@{ $hash->{IODev}{helper}{playlists}});
-            #$list .= " playPlaylistItem:slider,1,1,".scalar @playlists;
+            
             $list .= " playPlaylist:".join(",",@playlists) if( scalar @playlists > 0 );
             $list .= " deletePlaylist:".join(",",@playlists) if( scalar @playlists > 0 );
         }
@@ -772,7 +807,7 @@ sub HEOSPlayer_WriteReadings($$) {
     my $name                    = $hash->{NAME};
 
     
-    Log3 $name, 3, "HEOSPlayer ($name) - processing data to write readings";
+    Log3 $name, 4, "HEOSPlayer ($name) - processing data to write readings";
     ############################
     #### Aufbereiten der Daten soweit nötig (bei Events zum Beispiel)
     my $readingsHash    = HEOSPlayer_PreProcessingReadings($hash,$decode_json)
@@ -887,7 +922,7 @@ sub HEOSPlayer_PreProcessingReadings($$) {
         
     } else {
     
-        Log3 $name, 3, "HEOSPlayer ($name) - no match found";
+        Log3 $name, 4, "HEOSPlayer ($name) - no match found";
         return undef;
     }
     
@@ -958,26 +993,39 @@ sub HEOSPlayer_GetQueue($) {
     IOWrite($hash,'getQueue',"pid=$hash->{PID}",undef);
 }
 
-sub HEOSPlayer_Hexdump {
+sub HEOSPlayer_MakePlayLink($$$$) {
 
-    my $str = ref $_[0] ? ${$_[0]} : $_[0];
+    my ($name, $sid, $itemtype, $itemname) = @_;
+    my $xcmd = 'cmd'.uri_escape('=get '.$name.' ls '.$sid);
+    my $xtext = $sid;
 
-    return "[ZERO-LENGTH STRING]\n" unless length $str;
-
-    # split input up into 16-byte chunks:
-    my @chunks = $str =~ /([\0-\377]{1,16})/g;
-    # format and print:
-    my @print;
-    for (@chunks) {
-        my $hex = unpack "H*", $_;
-        tr/ -~/./c;                   # mask non-print chars
-        $hex =~ s/(..)(?!$)/$1 /g;      # insert spaces in hex
-        # make sure our hex output has the correct length
-        $hex .= ' ' x ( length($hex) < 48 ? 48 - length($hex) : 0 );
-        push @print, "$hex $_\n";
-    }
-    wantarray ? @print : join '', @print;
+    $xcmd = 'cmd'.uri_escape('=set '.$name.' input '.$sid) if ( $itemtype eq "heos_queue" );
+    $xcmd = "FW_cmd('$FW_ME$FW_subdir?XHR=1&$xcmd')";
+    return '<li style="list-style-type: none; display: inline;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", $xtext, $itemtype, $itemname )."</a></li>\n";
 }
+
+sub HEOSPlayer_MakePlayLink2($$$$) {
+
+    my ($name, $sid, $itemname, $itemurl, $xsize, $ysize) = @_;
+    my $xcmd = 'cmd'.uri_escape('=get '.$name.' ls '.$sid);
+    my $xtext = $sid;
+
+    $xcmd = "FW_cmd('$FW_ME$FW_subdir?XHR=1&$xcmd')";
+    return '<li style="list-style-type: none; display: inline;"><img src="'.$itemurl.'" width="'.$xsize.'" height="'.$ysize.'" style="float:left;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.$itemname."</a></li>\n";
+}
+
+sub HEOSPlayer_makeImage($$) {
+    my ($url, $xsize, $ysize) = @_;
+
+    my $ret .= "<img src=\"$url\" width=\"$xsize\" height=\"$ysize\" style=\"float:left;\">\n";
+
+    return $ret;
+}
+
+
+
+
+
 
 
 

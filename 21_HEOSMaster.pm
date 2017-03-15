@@ -54,7 +54,7 @@ eval "use IO::Socket::Multicast;1" or $missingModulNet .= "IO::Socket::Multicast
 
 
 
-my $version = "0.1.70";
+my $version = "0.1.71";
 
 my %heosCmds = (
     'enableChangeEvents'        => 'system/register_for_change_events?enable=',
@@ -134,8 +134,8 @@ sub HEOSMaster_GetInputs($);
 sub HEOSMaster_GetMusicSources($);
 sub HEOSMaster_GetPlaylists($);
 sub HEOSMaster_GetServers($);
-sub HEOSMaster_Hexdump;
 sub HEOSMaster_MakePlayLink($$$$);
+sub HEOSMaster_MakeImage($$);
 
 
 
@@ -282,59 +282,52 @@ sub HEOSMaster_Set($@) {
 
     
     if($cmd eq 'reopen') {
-    
         return "usage: reopen" if( @args != 0 );
+        
         HEOSMaster_ReOpen($hash);
         return undef;
         
     } elsif($cmd eq 'getPlayers') {
-    
         return "usage: getPlayers" if( @args != 0 );
+        
         $heosCmd    = 'getPlayers';
         $action     = undef;
         
     } elsif($cmd eq 'getGroups') {
-    
         return "usage: getGroups" if( @args != 0 );
+        
         $heosCmd    = 'getGroups';
         $action     = undef;
         
     } elsif($cmd eq 'enableChangeEvents') {
-    
         return "usage: enableChangeEvents" if( @args != 1 );
+        
         $heosCmd    = $cmd;
         $action     = $args[0];
         
     } elsif($cmd eq 'checkAccount') {
-    
         return "usage: checkAccount" if( @args != 0 );
+        
         $heosCmd    = $cmd;
         $action     = undef;
         
     } elsif($cmd eq 'signAccount') {
-    
         return "usage: signAccountIn" if( @args != 1 );
+        
         return "please set account informattion first" if(AttrVal($name,'heosUsername','none') eq 'none');
         $heosCmd    = $cmd . $args[0];
         $action     = 'un='. AttrVal($name,'heosUsername','none') . '&pw=' . HEOSMaster_ReadPassword($hash) if($args[0] eq 'In');
         
     } elsif($cmd eq 'password') {
-    
         return "usage: password" if( @args != 1 );
+        
         return HEOSMaster_StorePassword( $hash, $args[0] );
         
     } elsif($cmd eq 'reboot') {
-    
         return "usage: reboot" if( @args != 0 );
-        return HEOSMaster_StorePassword( $hash, $args[0] );
-        ###################################################
-        ### Dieser Menüpunkt ist nur zum testen
-    
-    } elsif($cmd eq 'eventSend') {
-            return "usage: eventSend" if( @args != 0 );
-            HEOSMaster_send($hash);
-            return undef;
-    ###################################################
+        
+        $heosCmd    = $cmd;
+        $action     = undef;
     
     } else {
     
@@ -507,7 +500,8 @@ sub HEOSMaster_ProcessRead($$) {
     
         $hash->{LAST_RECV} = time();
         Log3 $name, 5, "HEOSMaster ($name) - Decoding JSON message. Length: " . length($json) . " Content: " . $json;
-        my $obj = JSON->new->utf8(0)->decode($json);
+        #my $obj = JSON->new->utf8(0)->decode($json);   Änderung unter großem Vorbehalt wegen Sorge was Umlaute an geht!!!
+        my $obj = decode_json($json);
         
         if(defined($obj->{heos})) {
         
@@ -533,6 +527,7 @@ sub HEOSMaster_ResponseProcessing($$) {
     my ($hash,$json)    = @_;
     my $name            = $hash->{NAME};
     my $decode_json;
+    my %message;
 
     
     Log3 $name, 5, "HEOSMaster ($name) - JSON String: $json";
@@ -546,7 +541,7 @@ sub HEOSMaster_ResponseProcessing($$) {
     unless(ref($decode_json) eq "HASH");
 
     return Log3 $name, 4, "HEOSMaster ($name) - heos worked"
-    if( $decode_json->{heos}{message} =~ /command\sunder\sprocess/ );
+    if( defined($decode_json->{heos}{message}) && $decode_json->{heos}{message} =~ /command\sunder\sprocess/ );
 
     if( defined($decode_json->{heos}{result}) or $decode_json->{heos}{command} =~ /^system/ ) {
     
@@ -554,10 +549,30 @@ sub HEOSMaster_ResponseProcessing($$) {
         Log3 $name, 4, "HEOSMaster ($name) - call Sub HEOSMaster_WriteReadings";
     }
 
-    my %message = map { my ( $key, $value ) = split "="; $key => $value } split('&', $decode_json->{heos}{message});
+    if( defined($decode_json->{heos}{message}) ) {
 
-    return Log3 $name, 4, "HEOSMaster ($name) - general error ID $message{eid} - $message{text}"
-    if( defined($decode_json->{heos}{result}) && $decode_json->{heos}{result} =~ /fail/ );
+        %message = map { my ( $key, $value ) = split "="; $key => $value } split('&', $decode_json->{heos}{message});
+
+        return Log3 $name, 4, "HEOSMaster ($name) - general error ID $message{eid} - $message{text}"
+        if( defined($message{eid}) );
+    }
+
+    #Player neu einlesen
+    if( $decode_json->{heos}{command} =~ /^event\/players_changed/ ) {
+
+        HEOSMaster_Write($hash,'getPlayers',undef,undef);
+        return Log3 $name, 4, "HEOSMaster ($name) - player changed";
+    }
+
+    #Gruppen neu einlesen
+    if( $decode_json->{heos}{command} =~ /^event\/groups_changed/ ) {
+
+
+        HEOSMaster_Write($hash,'getGroups',undef,undef);
+        #Player neu einlesen da Stereopaare sonst nicht erkannt werden
+        InternalTimer( gettimeofday()+3, 'HEOSMaster_GetPlayers', $hash, 0 );
+        return Log3 $name, 4, "HEOSMaster ($name) - groups changed";
+    }
 
     #Quellen neu einlesen
     if( $decode_json->{heos}{command} =~ /^event\/sources_changed/ ) {        
@@ -566,26 +581,11 @@ sub HEOSMaster_ResponseProcessing($$) {
         return Log3 $name, 4, "HEOSMaster ($name) - source changed";
     }
 
-    #Player neu einlesen
-    if( $decode_json->{heos}{command} =~ /^event\/players_changed/ ) {
-    
-        HEOSMaster_Write($hash,'getPlayers',undef,undef);
-        return Log3 $name, 4, "HEOSMaster ($name) - player changed";        
-    }
-
     #User neu einlesen
     if( $decode_json->{heos}{command} =~ /^event\/user_changed/ ) {        
     
         HEOSMaster_Write($hash,'checkAccount',undef,undef);
         return Log3 $name, 4, "HEOSMaster ($name) - user changed";
-    }
-
-    #Gruppen neu einlesen
-    if( $decode_json->{heos}{command} =~ /^event\/groups_changed/ ) {
-    
-        #InternalTimer( gettimeofday()+5, 'HEOSMaster_GetGroups', $hash, 0 );
-        HEOSMaster_Write($hash,'getGroups',undef,undef);
-        return Log3 $name, 4, "HEOSMaster ($name) - groups changed";
     }
 
     #Queue für Player neu einlesen
@@ -668,7 +668,43 @@ sub HEOSMaster_ResponseProcessing($$) {
             
             my $start = $message{range} + $message{returned};
 
-            if( $message{sid} eq '1028' ) {
+            if( $message{sid} eq '1024' ) {
+
+                #Lokal einlesen
+                push( @{$hash->{helper}{sources}}, map { $_->{name} .= " USB" if ( $_->{sid} < 0 ); $_ }  (@{$decode_json->{payload}}) );
+
+                foreach my $source (@{$hash->{helper}{sources}}) {
+
+                    HEOSMaster_Write($hash,'searchCriteria','sid='.$source->{sid},undef);
+                    Log3 $name, 3, "HEOSMaster ($name) - call Browser for searchCriteria for sid $source->{sid}";
+                }
+
+            } elsif( $message{sid} eq '1025' ) {
+
+                #Playlisten einlesen
+                $hash->{helper}{playlists} = [] if ( $message{range} == 0 );
+                push( @{$hash->{helper}{playlists}}, (@{$decode_json->{payload}}) );
+
+            } elsif( $message{sid} eq '1026' ) {
+
+                #History einlesen
+                $hash->{helper}{history} = [] if ( $message{range} == 0 );
+                push( @{$hash->{helper}{history}}, (@{$decode_json->{payload}}) );
+
+            } elsif( $message{sid} eq '1027' ) {
+
+                #Inputs einlesen
+                $hash->{helper}{aux} = [] if ( $message{range} == 0 );
+                push( @{$hash->{helper}{aux}}, (@{$decode_json->{payload}}) );
+
+                foreach my $item (@{$decode_json->{payload}}) {
+
+
+                    HEOSMaster_Write($hash,'browseSource',"sid=$item->{sid}",undef);
+                    Log3 $name, 3, "HEOSMaster ($name) - call Browser for Input with sid $item->{sid}";
+                }
+
+            } elsif( $message{sid} eq '1028' ) {
             
                 #Favoriten einlesen
                 $hash->{helper}{favorites} = [] if ( $message{range} == 0 );
@@ -685,46 +721,10 @@ sub HEOSMaster_ResponseProcessing($$) {
                     }
                 }
                 
-            } elsif( $message{sid} eq '1026' ) {
-            
-                #History einlesen
-                $hash->{helper}{history} = [] if ( $message{range} == 0 );
-                push( @{$hash->{helper}{history}}, (@{$decode_json->{payload}}) );               
-                
-            } elsif( $message{sid} eq '1025' ) {
-            
-                #Playlisten einlesen
-                $hash->{helper}{playlists} = [] if ( $message{range} == 0 );
-                push( @{$hash->{helper}{playlists}}, (@{$decode_json->{payload}}) );
-                
-            } elsif( $message{sid} eq '1027' ) {
-            
-                #Inputs einlesen
-                $hash->{helper}{aux} = [] if ( $message{range} == 0 );
-                push( @{$hash->{helper}{aux}}, (@{$decode_json->{payload}}) );
-                
-                foreach my $item (@{$decode_json->{payload}}) {
-
-                    #$hash->{helper}{aux}{$item->{sid}} = $item->{name};
-                    HEOSMaster_Write($hash,'browseSource',"sid=$item->{sid}",undef);
-                    Log3 $name, 3, "HEOSMaster ($name) - call Browser for Input with sid $item->{sid}";
-                }
-                
-            } elsif( $message{sid} eq '1024' ) {
-            
-                #Lokal einlesen
-                push( @{$hash->{helper}{sources}}, map { $_->{name} .= " USB" if ( $_->{sid} < 0 ); $_ }  (@{$decode_json->{payload}}) );
-
-                foreach my $source (@{$hash->{helper}{sources}}) {
-                
-                    HEOSMaster_Write($hash,'searchCriteria','sid='.$source->{sid},undef);
-                    Log3 $name, 3, "HEOSMaster ($name) - call Browser for searchCriteria for sid $source->{sid}";
-                }
-
             } else {
 
                 #AUX Eingang des Player im Player abspeichern
-                if ( defined $hash->{helper}{aux} && grep( $_->{sid} =~ /$message{sid}/, (@{ $hash->{helper}{aux} }) ) ) {
+                if ( defined $hash->{helper}{aux} && grep( $_->{sid} =~ /^$message{sid}$/, (@{ $hash->{helper}{aux} }) ) ) {
 
                     my $code = abs($message{sid});
                     $code    = $hash->{NAME} ."-". $code if( defined($hash->{NAME}) );
@@ -783,16 +783,6 @@ sub HEOSMaster_ResponseProcessing($$) {
                         
                             @list     = (@{$hash->{helper}{favorites}});
                             
-                        } elsif ( $message{sid} eq "1029" ) {
-                        
-                            my $code  = abs($hash->{helper}{blocking}{$idx}{pid});
-                            $code     = $hash->{NAME} ."-". $code if( defined($hash->{NAME}) );
-                            
-                            if( my $phash    = $modules{HEOSPlayer}{defptr}{$code} ) {
-                            
-                                @list = (@{$phash->{helper}{queue}});
-                                
-                            }
                         } else {
                         
                             @list = (@{$hash->{helper}{media}});
@@ -867,10 +857,10 @@ sub HEOSMaster_ResponseProcessing($$) {
                 my $ret = '';
                 
                 $ret .= sprintf( "%-35s %-10s %s\n", 'Fav', 'type', 'title' );
-                foreach my $item (@{ $hash->{helper}{searchresult}}) {
+                #foreach my $item (@{ $hash->{helper}{searchresult}}) {
                 
-                    $ret .= HEOSMaster_MakePlayLink($hash->{helper}{blocking}{name}, 'input', $message{sid}, $item, sprintf( "%-35s %-10s %s\n", "x", $item->{type}, $item->{name} ) );
-                }
+                #    $ret .= HEOSMaster_MakePlayLink($hash->{helper}{blocking}{name}, 'input', $message{sid}, $item, sprintf( "%-35s %-10s %s\n", "x", $item->{type}, $item->{name} ) );
+                #}
                 
                 $ret .= "\n\n";
                 
@@ -968,7 +958,7 @@ sub HEOSMaster_ResponseProcessing($$) {
             if ( $start <  $message{count} ) {
                 
                 HEOSMaster_Write($hash,'getQueue',"pid=$message{pid}&range=$start,".($start + 100),undef);
-                Log3 $name, 3, "HEOSMaster ($name) - call getQueue for player pid $message{pid} next Range from $message{returned}";
+                Log3 $name, 4, "HEOSMaster ($name) - call getQueue for player pid $message{pid} next Range from $start";
 
             } else {
 
@@ -977,8 +967,8 @@ sub HEOSMaster_ResponseProcessing($$) {
         
                 if( my $phash    = $modules{HEOSPlayer}{defptr}{$code} ) {
                 
-                    $phash->{helper}{queue} = $hash->{helper}{queue};
-                    delete $hash->{helper}{queue};
+                    $phash->{helper}{queue} = $hash->{helper}{queue}{$message{pid}};
+                    delete $hash->{helper}{queue}{$message{pid}};
                 }
 
                 $json  = '{"heos": {"command": "event/player_queue_changed", "message": "pid='.$message{pid}.'"}}';
@@ -1108,7 +1098,7 @@ sub HEOSMaster_PreProcessingReadings($$) {
         $buffer{'enableChangeEvents'}   = $message{enable};
         
     } elsif ( $decode_json->{heos}{command} eq 'system/check_account' or $decode_json->{heos}{command} eq 'system/sign_in' ) {
-        if ( exists $message{signed_out} ) {
+        if ( exists $message{signed_out} || exists $message{eid}  ) {
         
             $buffer{'heosAccount'}  = "signed_out";
             
@@ -1326,7 +1316,6 @@ sub HEOSMaster_MakePlayLink($$$$) {
     my $xcmd;
     my $xtext = $message->{sid};
 
-    #return $txt if( !$FW_ME );
 
     if ( (exists $item->{playable} && $item->{playable} eq "yes") || exists $item->{qid} ) {
     
@@ -1375,29 +1364,16 @@ sub HEOSMaster_MakePlayLink($$$$) {
         $xtext .= ','.$item->{qid};
     }
     
-    $xcmd = "FW_cmd('/fhem?XHR=1&$xcmd')";
+    $xcmd = "FW_cmd('$FW_ME$FW_subdir?XHR=1&$xcmd')";
     return '<li style="list-style-type: none; display: inline;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", $xtext, $item->{type}, $item->{name} )."</a></li>\n";
-    #$FW_ME$FW_subdir
 }
 
-sub HEOSMaster_Hexdump {
-    my $str = ref $_[0] ? ${$_[0]} : $_[0];
+sub HEOSMaster_MakeImage($$) {
 
-    return "[ZERO-LENGTH STRING]\n" unless length $str;
+    my ($url, $size) = @_;
+    my $ret .= "<img src=\"$url\" &width=$size&height=$size\">\n";
 
-    # split input up into 16-byte chunks:
-    my @chunks = $str =~ /([\0-\377]{1,16})/g;
-    # format and print:
-    my @print;
-    for (@chunks) {
-        my $hex = unpack "H*", $_;
-        tr/ -~/./c;                   # mask non-print chars
-        $hex =~ s/(..)(?!$)/$1 /g;      # insert spaces in hex
-        # make sure our hex output has the correct length
-        $hex .= ' ' x ( length($hex) < 48 ? 48 - length($hex) : 0 );
-        push @print, "$hex $_\n";
-    }
-    wantarray ? @print : join '', @print;
+    return $ret;
 }
 
 
