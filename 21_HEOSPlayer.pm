@@ -38,7 +38,7 @@ use Encode qw(encode_utf8);
 use URI::Escape;
 use Data::Dumper;
 
-my $version = "0.1.71";
+my $version = "0.1.72";
 
 
 
@@ -396,27 +396,28 @@ sub HEOSPlayer_Set($$@) {
     return undef unless ( ReadingsVal($name, "state", "off") eq "on" );
 
     if( $cmd eq 'getPlayerInfo' ) {
-        return "usage: getPlayerInfo" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = $cmd;
         
     } elsif( $cmd eq 'getPlayState' ) {
-        return "usage: getPlayState" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = $cmd;
         
     } elsif( $cmd eq 'getPlayMode' ) {
-        return "usage: getPlayMode" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = $cmd;
         
     } elsif( $cmd eq 'getNowPlayingMedia' ) {
-        return "usage: getNowPlayingMedia" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = $cmd;
         
     } elsif( $cmd eq 'repeat' ) {
-        return "usage: repeat one,all,off" if( @args != 1 );
+        my $param = "one|all|off";
+        return "usage: $cmd $param" if( @args != 1 || ! grep { $_ =~ /$args[0]/ } split(/\|/, $param) );
         
         $heosCmd    = 'setPlayMode';
         $rvalue     = 'on_'.$args[0];
@@ -424,7 +425,8 @@ sub HEOSPlayer_Set($$@) {
         $action     = "repeat=$rvalue&shuffle=".ReadingsVal($name,'shuffle','off');
         
     } elsif( $cmd eq 'shuffle' ) {
-        return "usage: shuffle on,off" if( @args != 1 );
+        my $param = "on|off";
+        return "usage: $cmd $param" if( @args != 1 || ! grep { $_ =~ /$args[0]/ } split(/\|/, $param) );
         
         $heosCmd    = 'setPlayMode';
         $rvalue     = 'on_'.ReadingsVal($name,'repeat','off');
@@ -432,49 +434,50 @@ sub HEOSPlayer_Set($$@) {
         $action     = "repeat=$rvalue&shuffle=$args[0]";
         
     } elsif( $cmd eq 'play' ) {
-        return "usage: play" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = 'setPlayState';
         $action     = "state=$cmd";
         
     } elsif( $cmd eq 'stop' ) {
-        return "usage: stop" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = 'setPlayState';
         $action     = "state=$cmd";
         
     } elsif( $cmd eq 'pause' ) {
-        return "usage: pause" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = 'setPlayState';
         $action     = "state=$cmd";
         
     } elsif( $cmd eq 'mute' ) {
-        return "usage: mute on/off" if( @args != 1 );
+        my $param = "on|off";
+        return "usage: $cmd $param" if( @args != 1 || ! grep { $_ =~ /$args[0]/ } split(/\|/, $param) );
         
         $heosCmd    = 'setMute';
         $action     = "state=$args[0]";
         
     } elsif( $cmd eq 'volume' ) {
-        return "usage: volume 0-100" if( @args != 1 );
+        return "usage: $cmd 0-100" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > 100 || $args[0] < 0);
         
         $heosCmd    = 'setVolume';
         $action     = "level=$args[0]";
         
     } elsif( $cmd eq 'volumeUp' ) {
-        return "usage: volumeUp 0-10" if( @args != 1 );
+        return "usage: $cmd 0-10" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > 10 || $args[0] < 1);
         
         $heosCmd    = $cmd;
         $action     = "step=$args[0]";
         
     } elsif( $cmd eq 'volumeDown' ) {
-        return "usage: volumeDown 0-10" if( @args != 1 );
+        return "usage: $cmd 0-10" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > 10 || $args[0] < 1);
         
         $heosCmd    = $cmd;
         $action     = "step=$args[0]";
         
     } elsif( $cmd eq 'groupWithMember' ) {
-        return "usage: groupWithMember" if( @args != 1 );
+        return "usage: $cmd" if( @args != 1 );
         
         foreach ( split('\,', $args[0]) ) {
         
@@ -485,17 +488,17 @@ sub HEOSPlayer_Set($$@) {
         $heosCmd    = 'createGroup';
         
     } elsif( $cmd eq 'groupClear' ) {
-        return "usage: groupClear" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = 'createGroup';
         
     } elsif( $cmd eq 'next' ) {
-        return "usage: next" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = 'playNext';
         
     } elsif( $cmd eq 'prev' ) {
-        return "usage: prev" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = 'playPrev';
         

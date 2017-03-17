@@ -37,7 +37,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
 
-my $version = "0.1.71";
+my $version = "0.1.72";
 
 
 
@@ -249,36 +249,37 @@ sub HEOSGroup_Set($$@) {
     return undef unless ( ReadingsVal($name, "state", "off") eq "on" );
     
     if( $cmd eq 'getGroupInfo' ) {
-        return "usage: getGroupInfo" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = $cmd;
         
     } elsif( $cmd eq 'mute' ) {
-        return "usage: mute on/off" if( @args != 1 );
+        my $param = "on|off";
+        return "usage: $cmd $param" if( @args != 1 || ! grep { $_ =~ /$args[0]/ } split(/\|/, $param) );
         
         $heosCmd    = 'setGroupMute';
         $action     = "state=$args[0]";
         
     } elsif( $cmd eq 'volume' ) {
-        return "usage: volume 0-100" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > 100 || $args[0] < 0 );
+        return "usage: $cmd 0-100" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > 100 || $args[0] < 0 );
         
         $heosCmd    = 'setGroupVolume';
         $action     = "level=$args[0]";
         
     } elsif( $cmd eq 'volumeUp' ) {
-        return "usage: volumeUp 0-10" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > 10 || $args[0] < 0 );
+        return "usage: $cmd 0-10" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > 10 || $args[0] < 1 );
         
         $heosCmd    = 'GroupVolumeUp';
         $action     = "step=$args[0]";
         
     } elsif( $cmd eq 'volumeDown' ) {
-        return "usage: volumeDown 0-10" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > 10 || $args[0] < 0 );
+        return "usage: $cmd 0-10" if( @args != 1 || $args[0] !~ /(\d+)/ || $args[0] > 10 || $args[0] < 1 );
         
         $heosCmd    = 'groupVolumeDown';
         $action     = "step=$args[0]";
         
     } elsif( $cmd eq 'clearGroup' ) {
-        return "usage: clearGroup" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = 'createGroup';
         $string     = "pid=$gid";

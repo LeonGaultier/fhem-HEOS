@@ -54,7 +54,7 @@ eval "use IO::Socket::Multicast;1" or $missingModulNet .= "IO::Socket::Multicast
 
 
 
-my $version = "0.1.71";
+my $version = "0.1.72";
 
 my %heosCmds = (
     'enableChangeEvents'        => 'system/register_for_change_events?enable=',
@@ -265,6 +265,7 @@ sub HEOSMaster_Get($$@) {
 
     
     if( $cmd eq 'showAccount' ) {
+        return "usage: $cmd" if( @args != 0 );
     
         return AttrVal($name,'heosUsername',0) . ":" .HEOSMaster_ReadPassword($hash);
     }
@@ -282,49 +283,51 @@ sub HEOSMaster_Set($@) {
 
     
     if($cmd eq 'reopen') {
-        return "usage: reopen" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         HEOSMaster_ReOpen($hash);
         return undef;
         
     } elsif($cmd eq 'getPlayers') {
-        return "usage: getPlayers" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = 'getPlayers';
         $action     = undef;
         
     } elsif($cmd eq 'getGroups') {
-        return "usage: getGroups" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = 'getGroups';
         $action     = undef;
         
     } elsif($cmd eq 'enableChangeEvents') {
-        return "usage: enableChangeEvents" if( @args != 1 );
+        my $param = "on|off";
+        return "usage: $cmd $param" if( @args != 1 || ! grep { $_ =~ /$args[0]/ } split(/\|/, $param) );
         
         $heosCmd    = $cmd;
         $action     = $args[0];
         
     } elsif($cmd eq 'checkAccount') {
-        return "usage: checkAccount" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = $cmd;
         $action     = undef;
         
     } elsif($cmd eq 'signAccount') {
-        return "usage: signAccountIn" if( @args != 1 );
+        my $param = "In|Out";
+        return "usage: $cmd $param" if( @args != 1 || ! grep { $_ =~ /$args[0]/ } split(/\|/, $param) );
         
         return "please set account informattion first" if(AttrVal($name,'heosUsername','none') eq 'none');
         $heosCmd    = $cmd . $args[0];
         $action     = 'un='. AttrVal($name,'heosUsername','none') . '&pw=' . HEOSMaster_ReadPassword($hash) if($args[0] eq 'In');
         
     } elsif($cmd eq 'password') {
-        return "usage: password" if( @args != 1 );
+        return "usage: $cmd" if( @args != 1 );
         
         return HEOSMaster_StorePassword( $hash, $args[0] );
         
     } elsif($cmd eq 'reboot') {
-        return "usage: reboot" if( @args != 0 );
+        return "usage: $cmd" if( @args != 0 );
         
         $heosCmd    = $cmd;
         $action     = undef;
@@ -1384,3 +1387,149 @@ sub HEOSMaster_MakeImage($$) {
 
 
 1;
+
+
+
+
+=pod
+=item device
+=item summary       Modul to controls the Denon multiroom soundsystem
+=item summary_DE    Modul zum steuern des Denon Multiroom-Soundsystem
+
+=begin html
+
+<a name="HEOSMaster"></a>
+<h3>HEOSMaster</h3>
+<ul>
+  <u><b>HEOSMaster</b></u>
+  <br>
+  In combination with HEOSPlayer and HEOSGroup this FHEM Module controls the Denon multiroom soundsystem using a telnet socket connection and the HEOS Command Line Interface (CLI).
+  <br><br>
+  <b>Prerequisite</b>
+  <ul>
+    <li>Installation of the following packages: apt-get install libjson-perl libnet-telnet-perl libencode-perl
+</li>
+  </ul>
+    <br>
+  <a name="HEOSMasterdefine"></a>
+  <b>Define</b>
+  <ul><br>
+    <code>define &lt;name&gt; HEOSMaster &lt;IP address&gt;</code>
+    <br><br>
+    Example:
+    <ul><br>
+      <code>define MyMasterBox HEOSMaster 192.168.178.67</code><br>
+    </ul>
+    <br>
+    &ltIP address&gt is the IP address of Your HEOS receiver or HEOS box. The master device is created in the room HEOS, then the players of Your system are automatically recognized and created in FHEM. From now on the players can be controlled and changes in the HEOS app or at the Receiver are synchronized with the state and media readings of the players.
+  <a name="HEOSMasterreadings"></a>
+ <br><br>
+  <b>Readings</b>
+  <ul>
+    <li>enableChangeEvents - state of the event reproduction at CLI master (on|off)</li>
+    <li>heosAccount - signed_out | signed_in as &ltHEOSAccount&gt</li>
+    <li>lastCommand - last executed command</li>
+    <li>lastPlayerId - player id of the device, which executed the last command</li>
+    <li>lastPlayerName - player name of the device, which executed the last command</li>
+    <li>lastResult - result of the last executed command</li>
+    <li>state - state of the HEOSMaster</li>
+  </ul>
+  <br><br>
+  <a name="HEOSMasterset"></a>
+  <b>set</b>
+  <ul>
+    <li>checkAccount - checks Your HEOS account</li>
+    <li>enableChangeEvents - activates the event reproduction at the CLI master</li>
+    <li>getGroups - get a list of all groups and creates the devices, if not done already</li>
+    <li>getPlayers - get a list of all players and creates the devices, if not yet existing</li>
+    <li>password - set the password of Your HEOS account</li>
+    <li>reboot - reboot of the CLI interface at HEOSMaster</li>
+    <li>reopen - tries to establish a new socket connection with CLI master</li>
+    <li>signAccount In|Out - sign in|out Your HEOS account (attr MyMasterBox heosUsername &ltusername&gt)</li>
+  </ul>
+  <br><br>
+  <a name="HEOSMasterget"></a>
+  <b>get</b>
+  <ul>
+    <li>ShowAccount - shows Your HEOS account</li>
+  </ul>
+  <br><br>
+  <a name="HEOSMasterstate"></a>
+  <b>state</b>
+  <ul>
+    <li>connected - the HEOSmaster is connected to the CLI Master</li>
+    <li>not connected - the HEOSmaster is not connected to the CLI Master</li>
+  </ul>
+  
+  =end html
+
+=begin html_DE
+
+<a name="HEOSMaster"></a>
+<h3>HEOSMaster</h3>
+<ul>
+  <u><b>HEOSMaster</b></u>
+  <br>
+  In Kombination mit HEOSPlayer und HEOSGroup steuert dieses FHEM Modul das Denon Multiroom-Soundsystem mit Hilfe einer telnet Socket-Verbindung und dem HEOS Command Line Interface (CLI).
+  <br><br>
+  <b>Voraussetzung</b>
+  <ul>
+    <li>Installation der folgenden Pakete: apt-get install libjson-perl libnet-telnet-perl libencode-perl
+</li>
+  </ul>
+    <br>
+  <a name="HEOSMasterdefine"></a>
+  <b>Define</b>
+  <ul><br>
+    <code>define &lt;name&gt; HEOSMaster &lt;IP address&gt;</code>
+    <br><br>
+    Example:
+    <ul><br>
+      <code>define MyMasterBox HEOSMaster 192.168.178.67</code><br>
+    </ul>
+    <br>
+    &ltIP address&GT ist die IP-Adresse des HEOS Receivers oder der HEOS Box. Das Master Device wird im Raum HEOS angelegt und danach erfolgt das Einlesen und automatische Anlegen der Player.
+Von nun an k&oumlnnen die Player gesteuert werden. Au&szligerdem wird der Status und die Media Readings der Player entsprechend ge&aumlndert, wenn man in der HEOS-App oder direkt am Receiver etwas &aumlndert.
+
+  <a name="HEOSMasterreadings"></a>
+ <br><br>
+  <b>Readings</b>
+  <ul>
+    <li>enableChangeEvents - Status der Event Wiedergabe auf dem CLI Master</li>
+    <li>heosAccount - signed_out | signed_in as &ltHEOSAccount&gt</li>
+    <li>lastCommand - zuletzt ausgef&uumlhrtes Kommando</li>
+    <li>lastPlayerId - Player-Id des Ger&aumlts, welches das Kommando ausgef&uumlhrt hat</li>
+    <li>lastPlayerName - Player-Name des Ger&aumlts, welches das Kommando ausgef&uumlhrt hat</li>
+    <li>lastResult - Ergebnis des zuletzt ausgef&uumlhrten Kommandos</li>
+    <li>state - Status des HEOSMaster</li>
+  </ul>
+  <br><br>
+  <a name="HEOSMasterset"></a>
+  <b>set</b>
+  <ul>
+    <li>checkAccount - pr&uumlft das HEOS Konto</li>
+    <li>enableChangeEvents - aktiviert die Event Wiedergabe auf dem CLI Master</li>
+    <li>getGroups - holt eine Liste aller Gruppen und legt die Devices an, sofern noch nicht geschehen</li>
+    <li>getPlayers - holt eine Liste aller Player und legt die Devices an, sofern noch nicht vorhanden</li>
+    <li>password - setzt das Passwort des HEOS Kontos</li>
+    <li>reboot - rebootet das CLI Interface am Master</li>
+    <li>reopen - versucht eine neue Socket-Verbindung zum CLI Master aufzubauen</li>
+    <li>signAccount In|Out - anmelden|abmelden am HEOS Konto (attr MyMasterBox heosUsername &ltusername&gt)</li>
+  </ul>
+  <br><br>
+  <a name="HEOSMasterget"></a>
+  <b>get</b>
+  <ul>
+    <li>ShowAccount - zeigt das HEOS Konto an</li>
+  </ul>
+  <br><br>
+  <a name="HEOSMasterstate"></a>
+  <b>state</b>
+  <ul>
+    <li>connected - der HEOSmaster ist mit dem CLI Master verbunden</li>
+    <li>not connected - der HEOSmaster ist nicht mit dem CLI Master verbunden</li>
+  </ul>
+
+=end html_DE
+
+=cut
