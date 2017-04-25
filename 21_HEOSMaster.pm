@@ -6,7 +6,8 @@
 #  All rights reserved
 #
 #   Special thanks goes to comitters:
-#       - Olaf Schnicke
+#       - Olaf Schnicke         Thanks for many many Code
+#       - Dieter Hehlgans       Thanks for Commandref
 #
 #
 #  This script is free software; you can redistribute it and/or modify
@@ -54,7 +55,7 @@ eval "use IO::Socket::Multicast;1" or $missingModulNet .= "IO::Socket::Multicast
 
 
 
-my $version = "0.1.72";
+my $version = "0.1.75";
 
 my %heosCmds = (
     'enableChangeEvents'        => 'system/register_for_change_events?enable=',
@@ -1402,7 +1403,7 @@ sub HEOSMaster_MakeImage($$) {
 <h3>HEOSMaster</h3>
 <ul>
   <u><b>HEOSMaster</b></u>
-  <br>
+  <br><br>
   In combination with HEOSPlayer and HEOSGroup this FHEM Module controls the Denon multiroom soundsystem using a telnet socket connection and the HEOS Command Line Interface (CLI).
   <br><br>
   <b>Prerequisite</b>
@@ -1421,7 +1422,7 @@ sub HEOSMaster_MakeImage($$) {
       <code>define MyMasterBox HEOSMaster 192.168.178.67</code><br>
     </ul>
     <br>
-    &ltIP address&gt is the IP address of Your HEOS receiver or HEOS box. The master device is created in the room HEOS, then the players of Your system are automatically recognized and created in FHEM. From now on the players can be controlled and changes in the HEOS app or at the Receiver are synchronized with the state and media readings of the players.
+    &ltIP address&gt is the IP address of Your HEOS receiver or HEOS box. The master device is created in the room HEOS, then the players of Your system are recognized automatically and created in FHEM. From now on the players can be controlled and changes in the HEOS app or at the Receiver are synchronized with the state and media readings of the players.
   <a name="HEOSMasterreadings"></a>
  <br><br>
   <b>Readings</b>
@@ -1460,8 +1461,16 @@ sub HEOSMaster_MakeImage($$) {
     <li>connected - the HEOSmaster is connected to the CLI Master</li>
     <li>not connected - the HEOSmaster is not connected to the CLI Master</li>
   </ul>
+ <br><br>
+  <a name="HEOSMasterattributes"></a>
+  <b>attributes</b>
+  <ul>
+    <li>heosUsername - username of Your HEOS account</li>
+  </ul>
+  <br><br>
+</ul>
   
-  =end html
+=end html
 
 =begin html_DE
 
@@ -1469,7 +1478,7 @@ sub HEOSMaster_MakeImage($$) {
 <h3>HEOSMaster</h3>
 <ul>
   <u><b>HEOSMaster</b></u>
-  <br>
+  <br><br>
   In Kombination mit HEOSPlayer und HEOSGroup steuert dieses FHEM Modul das Denon Multiroom-Soundsystem mit Hilfe einer telnet Socket-Verbindung und dem HEOS Command Line Interface (CLI).
   <br><br>
   <b>Voraussetzung</b>
@@ -1529,6 +1538,14 @@ Von nun an k&oumlnnen die Player gesteuert werden. Au&szligerdem wird der Status
     <li>connected - der HEOSmaster ist mit dem CLI Master verbunden</li>
     <li>not connected - der HEOSmaster ist nicht mit dem CLI Master verbunden</li>
   </ul>
+ <br><br>
+  <a name="HEOSMasterattributes"></a>
+  <b>Attributes</b>
+  <ul>
+    <li>heosUsername - Benutzername des HEOS Kontos</li>
+  </ul>
+  <br><br>
+</ul>
 
 =end html_DE
 

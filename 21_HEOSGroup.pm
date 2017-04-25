@@ -6,7 +6,8 @@
 #  All rights reserved
 #
 #   Special thanks goes to comitters:
-#       - Olaf Schnicke
+#       - Olaf Schnicke         Thanks for many many Code
+#       - Dieter Hehlgans       Thanks for Commandref
 #
 #
 #  This script is free software; you can redistribute it and/or modify
@@ -37,7 +38,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
 
-my $version = "0.1.72";
+my $version = "0.1.75";
 
 
 
@@ -616,8 +617,180 @@ sub HEOSGroup_GetGroupMute($) {
 
 
 
-
-
-
-
 1;
+
+
+
+
+
+
+
+=pod
+=item device
+=item summary       Modul to controls the Denon multiroom soundsystem
+=item summary_DE    Modul zum steuern des Denon Multiroom-Soundsystem
+
+=begin html
+
+<a name="HEOSGroup"></a>
+<h3>HEOSGroup</h3>
+<ul>
+  <u><b>HEOSGroup</b></u>
+  <br><br>
+  In combination with HEOSMaster and HEOSPlayer this FHEM Module controls the Denon multiroom soundsystem using a telnet socket connection and the HEOS Command Line Interface (CLI).  
+  <br><br>
+  Once the master device is created, the players and groups of Your system are automatically recognized and created in FHEM. From now on the players and groups can be controlled and changes in the HEOS app or at the Receiver are synchronized with the state and media readings of the players and groups.
+  <br>
+  <br>
+  Groups can be created from a player with "groupWithMember".
+  <br><br>
+  Example:
+  <ul><br>
+  <code>set living groupWithMember kitchen</code><br>
+  </ul>
+  <br>
+  ... creates a group named "living+kitchen" with player "living" as leader and player "kitchen" as member.
+  <a name="HEOSGroupreadings"></a>
+ <br><br>
+ <a name="HEOSGroupreadings"></a>
+ <br><br>
+  <b>Readings</b>
+  <ul>
+    <li>channel - nr of now playing favorite</li>
+    <li>currentAlbum - name of now playing album</li>
+    <li>currentArtist - name of now playing artist</li>
+    <li>currentImageUrl - URL of cover art, station logo, etc.</li>
+    <li>currentMedia - type of now playing media (song|station|genre|artist|album|container)</li>
+    <li>currentMid - media ID</li>
+    <li>currentQid - queue ID</li>
+    <li>currentSid - source ID</li>
+    <li>currentStation - name of now playing station</li>
+    <li>currentTitle - name of now playing title</li>
+    <li>error - last error</li>
+    <li>gid - group ID</li>
+    <li>leader - leader of the group</li>
+    <li>member - member(s) of the group</li>
+    <li>mute - player mute state (on|off)</li>
+    <li>name - name of player (received from app)</li>
+    <li>playStatus - state of player (play|pause|stop)</li>
+    <li>repeat - player repeat state (on_all|on_one|off)</li>
+    <li>shuffle - player shuffle state (on|off)</li>
+    <li>state - state of player connection (on|off)</li>
+    <li>volume - player volume level (0-100)</li>
+    <li>volumeDown - player volume step level (1-10, default 5)</li>
+    <li>volumeUp - player volume step level (1-10, default 5)</li>
+  </ul>
+  <br><br>
+  <a name="HEOSGroupset"></a>
+  <b>set</b>
+  <ul>
+    <li>channel &ltnr&gt - plays favorite &ltnr&gt created with app</li>
+    <li>channelUp - switches to next favorite</li>
+    <li>channelDown- switches to previous favorite</li>
+    <li>clearGroup - dissolves the group (sets state to off)</li>
+    <li>GetGroupInfo - get media info of the group</li>
+    <li>mute on|off - set mute state on|off</li>
+    <li>next - play next title in queue</li>
+    <li>pause - set state of player to "pause"</li>
+    <li>play - set state of player to "play"</li>
+    <li>playPlaylist &ltmyList&gt - play playlist &ltmyList&gt</li>
+    <li>prev - play previous title in queue</li>
+    <li>repeat - set player repeat state (on_all|on_one|off)</li>
+    <li>shuffle - set player shuffle state on|off</li>
+    <li>stop - set state of player to "stop"</li>
+    <li>volume - set volume 0..100</li>
+    <li>volumeDown - reduce volume by &ltvolumeDown&gt</li>
+    <li>volumeUp - increase volume by &ltvolumeUp&gt</li>
+  </ul>
+  <br><br>
+  <a name="HEOSGroupstate"></a>
+  <b>state</b>
+  <ul>
+    <li>state of group (on|off)</li>
+  </ul>  
+</ul>
+
+=end html
+
+=begin html_DE
+
+<a name="HEOSGroup"></a>
+<h3>HEOSGroup</h3>
+<ul>
+  <u><b>HEOSGroup</b></u>
+  <br><br>
+  In Kombination mit HEOSMaster and HEOSPlayer steuert dieses FHEM Modul das Denon Multiroom-Soundsystem mit Hilfe einer telnet Socket-Verbindung und dem HEOS Command Line Interface (CLI). 
+  <br><br>
+  Nachdem der Master einmal angelegt ist werden die Player und Gruppierungen des Systems automatisch erkannt und in FHEM angelegt. Von da an k&oumlnnen die Player und Gruppierungen gesteuert werden und Ver&aumlnderungen in der HEOS App oder am Reveiver werden mit dem Status und den Media Readings der Player und Gruppierungen synchronisiert.
+  <br>
+  <br>
+  Gruppierungen k&oumlnnen aus einem Player heraus mit "groupWithMember" erzeugt werden.
+<br><br>
+  Beispiel:
+  <ul><br>
+  <code>set Wohnzimmer groupWithMember K&uumlche</code><br>
+  </ul>
+  <br>
+  ... erzeugt eine Gruppierung namens "Wohnzimmer+K&uumlche" mit dem Player "Wohnzimmer" als Leader und dem Player "K&uumlche" als Mitglied.
+  <a name="HEOSGroupreadings"></a>
+ <br><br>
+  <b>Readings</b>
+  <ul>
+    <li>channel - Nr des gerade abgespielten Favoriten</li>
+    <li>currentAlbum - Name des gerade abgespielten Albums</li>
+    <li>currentArtist - Name des gerade abgespielten K&uumlnstlers</li>
+    <li>currentImageUrl - URL des Albumcovers, Senderlogos, etc.</li>
+    <li>currentMedia - Medientyp des gerade abgespielten Streams (song|station|genre|artist|album|container)</li>
+    <li>currentMid - media ID</li>
+    <li>currentQid - queue ID</li>
+    <li>currentSid - source ID</li>
+    <li>currentStation - Name des gerade abgespielten Senders</li>
+    <li>currentTitle - Name des gerade abgespielten Titels</li>
+    <li>error - letzte Fehlermeldung</li>
+    <li>gid - Gruppen-ID</li>
+    <li>leader - Leader der Gruppierung</li>
+    <li>member - Mitglied(er) der Gruppierung</li>
+    <li>mute - Player mute Status (on|off)</li>
+    <li>name - Name der Gruppierung</li>
+    <li>playStatus - Status des Players (play|pause|stop)</li>
+    <li>repeat - Player Repeat Status (on_all|on_one|off) </li>
+    <li>shuffle - Player Shuffle Status (on|off)</li>
+    <li>state - Status der Player-Verbindung (on|off)</li>
+    <li>volume - aktuelle Lautst&aumlrke (0-100)</li>
+    <li>volumeDown - Schrittweite Lautst&aumlrke (1-10, default 5)</li>
+    <li>volumeUp - Schrittweite Lautst&aumlrke (1-10, default 5)</li>
+  </ul>
+  <br><br>
+  <a name="HEOSGroupset"></a>
+  <b>set</b>
+  <ul>
+    <li>channel &ltnr&gt - spielt den vorher mit der App erstellten Favoriten &ltnr&gt ab</li>
+    <li>channelUp - schaltet auf den n&aumlchsten Favoriten in der Favoritenliste um</li>
+    <li>channelDown- schaltet auf vorherigen Favoriten in der Favoritenliste um</li>
+    <li>clearGroup - Aufl&oumlsen der Gruppierung (setzt state auf off)</li>
+    <li>getGroupInfo - holt die Media-Informationen der Gruppierung</li>
+    <li>mute on|off - setze den mute Status on|off</li>
+    <li>next - spielt n&aumlchsten Titel in Warteschlange</li>
+    <li>pause - setzt den Status des Players auf "pause"</li>
+    <li>play - setzt den Status des Players auf "play"</li>
+    <li>playPlaylist &ltmyList&gt - spielt die Playlist &ltmyList&gt ab</li>
+    <li>prev - spielt vorherigen Titel in Warteschlange</li>
+    <li>repeat - setzt den Player Repeat Status (on_all|on_one|off) </li>
+    <li>saveQueue &ltmyList&gt - speichert die Warteschlange als Playlist &ltmyList&gt</li>
+    <li>shuffle - setzt den Player Shuffle Status auf on|off</li>
+    <li>stop - setzt den Status des Players auf "stop"</li>
+    <li>volume - setzt die Lautst&aumlrke auf 0..100</li>
+    <li>volumeDown - verringert die Lautst&aumlrke um &ltvolumeDown&gt</li>
+    <li>volumeUp - erh&oumlht die Lautst&aumlrke um &ltvolumeUp&gt</li>
+  </ul>
+  <br><br>
+  <a name="HEOSGroupstate"></a>
+  <b>state</b>
+  <ul>
+    <li>Status der Gruppierung (on|off)</li>
+  </ul>
+</ul>
+
+=end html_DE
+
+=cut
