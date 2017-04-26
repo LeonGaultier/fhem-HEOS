@@ -6,8 +6,7 @@
 #  All rights reserved
 #
 #   Special thanks goes to comitters:
-#       - Olaf Schnicke         Thanks for many many Code
-#       - Dieter Hehlgans       Thanks for Commandref
+#       - Olaf Schnicke
 #
 #
 #  This script is free software; you can redistribute it and/or modify
@@ -39,7 +38,7 @@ use Encode qw(encode_utf8);
 use URI::Escape;
 use Data::Dumper;
 
-my $version = "0.1.75";
+my $version = "0.1.72";
 
 
 
@@ -61,7 +60,7 @@ sub HEOSPlayer_GetPlayMode($);
 sub HEOSPlayer_GetVolume($);
 sub HEOSPlayer_Get($$@);
 sub HEOSPlayer_GetMute($);
-
+sub HEOSPlayer_MakePlayLink($$$$$$$$);
 
 
 
@@ -230,7 +229,12 @@ sub HEOSPlayer_Get($$@) {
     my $pid     = $hash->{PID};
     my $result  = "";
     my $me      = {};
+    my $ret;
     
+    $me->{cl}   = $hash->{CL} if( ref($hash->{CL}) eq 'HASH' );
+    $me->{name} = $hash->{NAME};
+    $me->{pid}  = $hash->{PID};
+
     #Leerzeichen müßen für die Rückgabe escaped werden sonst werden sie falsch angezeigt
     if( $cmd eq 'channelscount' ) {
     
@@ -244,46 +248,67 @@ sub HEOSPlayer_Get($$@) {
         #$param = substr($param,1) if( $param && $param =~ '^|' );
 
         if ( $param eq '' ) {
-        
-            my $ret = "Musik\n";
-            #$ret .= sprintf( "%-35s %-15s %s\n", 'key', 'type', 'title' );
 
-            foreach my $item (@{ $hash->{IODev}{helper}{sources}}) {
-            
-                #$ret .= '<li style="list-style-type: none; display: inline;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", $item->{sid}, $item->{type}, $item->{name} )."</a></li>\n";
-                $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, $item->{sid}, $item->{type}, $item->{name});
+            if( $me->{cl}->{TYPE} eq 'FHEMWEB' ) {
+
+                $ret = '<div class="container">';
+                $ret .= '<h3 style="text-align: center;">Musik</h3><hr>';
+                $ret .= '<div class="list-group">';
+
+            } else {
+
+                $ret = "Musik\n";
+                $ret .= sprintf( "%-15s %s\n", 'key', 'title' );
+
             }
 
-            $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1025", "heos_service", "Playlist")
-            if ( defined $hash->{IODev}{helper}{playlists} );
-            #https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_playlists.png
+            foreach my $item (@{ $hash->{IODev}{helper}{sources}}) {            
+                $ret .= HEOSPlayer_MakePlayLink($me->{cl}->{TYPE}, $hash->{NAME}, $item->{sid}, $item->{type}, $item->{name}, $item->{image_url}, 128, 50);
+            }
 
-            $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1026", "heos_service", "Verlauf")
-            if ( defined $hash->{IODev}{helper}{history} );
-            #https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_history.png
+            $ret .= HEOSPlayer_MakePlayLink($me->{cl}->{TYPE}, $hash->{NAME}, "1025", "heos_service", "Playlist", "https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_playlists.png", 128, 32);
 
-            $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1027", "heos_service", "Eingänge")
-            if ( defined $hash->{IODev}{helper}{aux} );
-            #https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_aux.png
+            $ret .= HEOSPlayer_MakePlayLink($me->{cl}->{TYPE}, $hash->{NAME}, "1026", "heos_service", "Verlauf", "https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_history.png", 128, 32);
 
-            $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1028", "heos_service", "Favoriten")
-            if ( defined $hash->{IODev}{helper}{favorites} );
-            #https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_favorites.png
+            $ret .= HEOSPlayer_MakePlayLink($me->{cl}->{TYPE}, $hash->{NAME}, "1027", "heos_service", "Eingänge", "https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_aux.png", 128, 32);
 
-            $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1029", "heos_service", "Warteschlange")
-            if ( defined $hash->{helper}{queue} );
-            #https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_playlists.png
+            $ret .= HEOSPlayer_MakePlayLink($me->{cl}->{TYPE}, $hash->{NAME}, "1028", "heos_service", "Favoriten", "https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_favorites.png", 128, 32);
 
-            $ret .= "\n\n";
+            $ret .= HEOSPlayer_MakePlayLink($me->{cl}->{TYPE}, $hash->{NAME}, "1029", "heos_service", "Warteschlange", "https://production.ws.skyegloup.com:443/media/images/service/logos/musicsource_logo_playlists.png", 128, 32);
+
+            #$ret .= "\n\n";
+
+            if( $me->{cl}->{TYPE} eq 'FHEMWEB' ) {
+
+                $ret .= '</div></div>';
+                $ret =~ s/&/&amp;/g;
+                $ret =~ s/'/&apos;/g;
+                $ret =~ s/\n/<br>/g;
+                $ret = "<pre>$ret</pre>" if( $ret =~ m/  / );
+                $ret = "<html>$ret</html>";
+
+            } else {
+
+                #$ret =~ s/<h3[^>]*>//g;
+                #$ret =~ s/<\/h3>/\n\n/g;
+                #$ret =~ s/<h5[^>]*>//g;
+                #$ret =~ s/<\/h5>/\n/g;
+                #$ret =~ s/<hr>//g;
+                #$ret =~ s/<a[^>]*>//g;
+                #$ret =~ s/<\/a>//g;
+                #$ret =~ s/<img[^>]*>//g;
+                #$ret =~ s/<div[^>]*>//g;
+                #$ret =~ s/<\/div>//g;
+                #$ret .= "\n";
+                
+            }
+            
             return $ret;
 
         } else {
 
-            my ($sid,$cid)=$param=~/^(-?\d+),?(.*)$/;
-
-            $me->{cl}   = $hash->{CL} if( ref($hash->{CL}) eq 'HASH' );
-            $me->{name} = $hash->{NAME};
-            $me->{pid}  = $hash->{PID};
+            my ($sid,$cid) = split /,/,$param;
+            #$param=~/^(-?\d+),?(.*)$/;  
 
             if ( $sid eq "1025" ) {
             
@@ -333,20 +358,46 @@ sub HEOSPlayer_Get($$@) {
                 }
                 
             } elsif ( defined $sid && $sid eq "1029" ) {
+
+                if( $me->{cl}->{TYPE} eq 'FHEMWEB' ) {
             
-                my $ret = "$hash->{NAME}/Warteschlange\n";
-                $ret .= sprintf( "%-35s %-15s %s\n", 'key', 'type', 'title' );
+                    $ret = '<div class="container">';
+                    $ret .= '<h2 style="text-align: center;">'.$hash->{NAME}.'</h2>';
+                    $ret .= '<h3 style="text-align: center;">Warteschlange</h3><hr>';
+
+                    $ret .= '<div class="container" style="display: inline-block;width: 50%;"><a href="#" onClick="FW_cmd('."'$FW_ME$FW_subdir?XHR=1&cmd".uri_escape('=set '.$hash->{NAME}.' clearQueue')."')".'" style="cursor:pointer;"><img style="width: 32px; height: 32px;display: block;margin-left: auto;margin-right: auto;" src="'."$FW_ME$FW_subdir".'/images/fhemSVG/recycling.svg"></a></div>';
+
+                    $ret .= '<div class="list-group">';
+
+                } else {
+
+                    $ret .= "Warteschlange von $hash->{NAME} \n";
+                    $ret .= sprintf( "%-15s %s\n", 'key', 'title' );
+                }
 
                 my $x = 0;
+                my $itemtext;
+                my $itemkey;
+
                 foreach my $item (@{ $hash->{helper}{queue}}) {
-                
-                    $ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1029,".++$x, "heos_queue", $item->{song} );
+
+                    $itemtext = $item->{artist};
+                    $itemtext .= ( defined $item->{artist} ) ? (", ".$item->{album}) : ($item->{album}) if ( defined $item->{album} );
+                    $itemkey = '1029,'.++$x;
+
+                    if( $me->{cl}->{TYPE} eq 'FHEMWEB' ) {
+                        my $xcmd = 'cmd'.uri_escape('=set '.$hash->{NAME}.' input '.$itemkey);
+                        $xcmd = "FW_cmd('$FW_ME$FW_subdir?XHR=1&$xcmd')";
+                        $ret .= '<a href="#" onClick="'.$xcmd.'" class="list-group-item"><h4 class="list-group-item-heading">'.$item->{song}.'</h4><p class="list-group-item-text">'.$itemtext."</p></a>";
+                        #$ret .= HEOSPlayer_MakePlayLink($hash->{NAME}, "1029,".++$x, "heos_queue", $item->{song}, $item->{image_url}, 64, 64);   
+                    } else {
+                        $ret .= sprintf( "%-15s %s\n", $itemkey, $item->{song}.", ".$itemtext )
+                    }
                 }
-                
-                $ret .= "\n\n";
 
                 if( $me->{cl}->{TYPE} eq 'FHEMWEB' ) {
 
+                    $ret .= '</div></div>';
                     $ret =~ s/&/&amp;/g;
                     $ret =~ s/'/&apos;/g;
                     $ret =~ s/\n/<br>/g;
@@ -355,16 +406,16 @@ sub HEOSPlayer_Get($$@) {
 
                 } else {
 
-                    $ret =~ s/<a[^>]*>//g;
-                    $ret =~ s/<\/a>//g;
-                    $ret =~ s/<img[^>]*>\n//g;
-                    $ret .= "\n";
+                    #$ret =~ s/<a[^>]*>//g;
+                    #$ret =~ s/<\/a>//g;
+                    #$ret =~ s/<img[^>]*>\n//g;
+                    #$ret =~ s/<div[^>]*>//g;
+                    #$ret =~ s/<\/div>//g;
+                    #$ret .= "\n";
                 }
                 
-                asyncOutput( $me->{cl}, $ret );
-                #delete $me;
-                return undef;
-                
+                asyncOutput( $me->{cl}, $ret );                
+                                
             } else {
             
                 $action = "sid=$sid";
@@ -630,8 +681,7 @@ sub HEOSPlayer_Set($$@) {
         return "usage: $cmd sid[,cid][,mid]" if( @args != 1 );
 
         my $param = shift( @args );
-        my ($sid,$cid,$mid)=$param=~/^(-?\d+),(.+?)(?:,(.*))?/;
-
+        my ($sid,$cid,$mid) = split /,/,$param;
         return "usage: $cmd sid[,cid][,mid]" unless( defined $sid || $sid eq "" );
 
         if ( $sid eq "1024" ) {
@@ -685,7 +735,7 @@ sub HEOSPlayer_Set($$@) {
             return "usage: $cmd sid,qid" unless( defined($cid) );
 
             #Warteschlange abspielen
-            $heosCmd = 'playQueue';
+            $heosCmd = 'playQueueItem';
             $action  = "qid=$cid";
 
         } else {
@@ -736,7 +786,7 @@ sub HEOSPlayer_Set($$@) {
             $list .= " playPlaylist:".join(",",@playlists) if( scalar @playlists > 0 );
             $list .= " deletePlaylist:".join(",",@playlists) if( scalar @playlists > 0 );
         }
-
+        print "List#########################################################\n".Dumper($list);
         $list .= " aux:noArg" if ( exists $hash->{helper}{aux} );
         return "Unknown argument $cmd, choose one of $list";
     }
@@ -767,6 +817,7 @@ sub HEOSPlayer_Parse($$) {
         if( my $hash    = $modules{HEOSPlayer}{defptr}{$code} ) {
         
             IOWrite($hash,'getPlayerInfo',"pid=$hash->{PID}",undef);
+            readingsSingleUpdate( $hash, "state", "on", 1 );
             Log3 $hash->{NAME}, 4, "HEOSPlayer ($hash->{NAME}) - find logical device: $hash->{NAME}";
             Log3 $hash->{NAME}, 4, "HEOSPlayer ($hash->{NAME}) - find PID in root from decode_json";
             return $hash->{NAME};
@@ -859,7 +910,7 @@ sub HEOSPlayer_WriteReadings($$) {
     my( @index )= grep { $presets[$_] eq $search } 0..$#presets if ( defined $search );
     
     readingsBulkUpdate( $hash, 'channel', $index[0]+1 ) if ( scalar @index > 0 );
-    readingsBulkUpdate( $hash, 'state', 'on' );
+    #readingsBulkUpdate( $hash, 'state', 'on' );
     readingsEndUpdate( $hash, 1 );
     Log3 $name, 5, "HEOSPlayer ($name) - readings set for $name";
     return undef;
@@ -997,25 +1048,27 @@ sub HEOSPlayer_GetQueue($) {
     IOWrite($hash,'getQueue',"pid=$hash->{PID}",undef);
 }
 
-sub HEOSPlayer_MakePlayLink($$$$) {
+sub HEOSPlayer_MakePlayLink($$$$$$$$) {
 
-    my ($name, $sid, $itemtype, $itemname) = @_;
-    my $xcmd = 'cmd'.uri_escape('=get '.$name.' ls '.$sid);
-    my $xtext = $sid;
+    my ($type, $name, $sid, $itemtype, $itemname, $itemurl, $xsize, $ysize) = @_;
+    
+    if( $type eq 'FHEMWEB' ) {
 
-    $xcmd = 'cmd'.uri_escape('=set '.$name.' input '.$sid) if ( $itemtype eq "heos_queue" );
-    $xcmd = "FW_cmd('$FW_ME$FW_subdir?XHR=1&$xcmd')";
-    return '<li style="list-style-type: none; display: inline;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", $xtext, $itemtype, $itemname )."</a></li>\n";
-}
+        my $xcmd = 'cmd'.uri_escape('=get '.$name.' ls '.$sid);
+        my $xtext = $sid;
+    
+        $xcmd = 'cmd'.uri_escape('=set '.$name.' input '.$sid) if ( $itemtype eq "heos_queue" );
+        $ysize = '10.75em' if (!defined($ysize));
+        $xcmd = "FW_cmd('$FW_ME$FW_subdir?XHR=1&$xcmd')";
+        
+        return '<a onClick="'.$xcmd.'" class="list-group-item active" style="display: flex;align-items: center;cursor:pointer;"><img style="width: '.$xsize.'px; height: '.$ysize.'px;" src="'.$itemurl.'"><h5 class="list-group-item-heading" style="padding: 10px;">'.$itemname."</h5></a>";
 
-sub HEOSPlayer_MakePlayLink2($$$$) {
+    } else {
 
-    my ($name, $sid, $itemname, $itemurl, $xsize, $ysize) = @_;
-    my $xcmd = 'cmd'.uri_escape('=get '.$name.' ls '.$sid);
-    my $xtext = $sid;
+        return sprintf( "%-15s %s\n", $sid, $itemname );
 
-    $xcmd = "FW_cmd('$FW_ME$FW_subdir?XHR=1&$xcmd')";
-    return '<li style="list-style-type: none; display: inline;"><img src="'.$itemurl.'" width="'.$xsize.'" height="'.$ysize.'" style="float:left;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.$itemname."</a></li>\n";
+    }
+
 }
 
 sub HEOSPlayer_makeImage($$) {
@@ -1029,204 +1082,10 @@ sub HEOSPlayer_makeImage($$) {
 
 
 
+
+
+
+
+
+
 1;
-
-
-
-
-
-
-=pod
-=item device
-=item summary       Modul to controls the Denon multiroom soundsystem
-=item summary_DE    Modul zum steuern des Denon Multiroom-Soundsystem
-
-=begin html
-
-<a name="HEOSPlayer"></a>
-<h3>HEOSPlayer</h3>
-<ul>
-  <u><b>HEOSPlayer</b></u>
-  <br><br>
-  In combination with HEOSMaster and HEOSGroup this FHEM Module controls the Denon multiroom soundsystem using a telnet socket connection and the HEOS Command Line Interface (CLI).
-  <br><br>
-  Once the master device is created, the players and groups of Your system are automatically recognized and created in FHEM. From now on the players and groups can be controlled and changes in the HEOS app or at the Receiver are synchronized with the state and media readings of the players and groups.
-  <a name="HEOSPlayerreadings"></a>
- <br><br>
-  <b>Readings</b>
-  <ul>
-    <li>channel - nr of now playing favorite</li>
-    <li>currentAlbum - name of now playing album</li>
-    <li>currentArtist - name of now playing artist</li>
-    <li>currentImageUrl - URL of cover art, station logo, etc.</li>
-    <li>currentMedia - type of now playing media (song|station|genre|artist|album|container)</li>
-    <li>currentMid - media ID</li>
-    <li>currentQid - queue ID</li>
-    <li>currentSid - source ID</li>
-    <li>currentStation - name of now playing station</li>
-    <li>currentTitle - name of now playing title</li>
-    <li>ip-address - ip address of the player</li>
-    <li>lineout - lineout level type (variable|Fixed)</li>
-    <li>model - model of HEOS speaker (e.g. HEOS 1)</li>
-    <li>mute - player mute state (on|off)</li>
-    <li>name - name of player (received from app)</li>
-    <li>network - network connection type (wired|wifi)</li>
-    <li>playStatus - state of player (play|pause|stop)</li>
-    <li>repeat - player repeat state (on_all|on_one|off)</li>
-    <li>shuffle - player shuffle state (on|off)</li>
-    <li>state - state of player connection (on|off)</li>
-    <li>version - software version of HEOS speaker</li>
-    <li>volume - player volume level (0-100)</li>
-    <li>volumeDown - player volume step level (1-10, default 5)</li>
-    <li>volumeUp - player volume step level (1-10, default 5)</li>
-  </ul>
-  <br><br>
-  <a name="HEOSPlayerset"></a>
-  <b>set</b>
-  <ul>
-    <li>aux - uses source at aux-input of player</li>
-    <li>channel &ltnr&gt - plays favorite &ltnr&gt created with app</li>
-    <li>channelUp - switches to next favorite</li>
-    <li>channelDown- switches to previous favorite</li>
-    <li>clear queue - clears the queue</li>
-    <li>deletePlaylist &ltmyList&gt - clears playlist &ltmyList&gt</li>
-    <li>getNowPlayingMedia - get media info from now playing stream</li>
-    <li>getPlayMode - get player mode (repeat|shuffle)</li>
-    <li>getPlayState - get player state (play|pause|stop)</li>
-    <li>getPlayerInfo - get player info (pid, gid, network, ...)</li>
-    <li>set &lthp1&gt groupWithMember &lthp2&gt - creates group with hp1 as leader and hp2 as member</li>
-    <li>input sid[,cid][,mid] - set input source-id[,container-id][,media-id]  </li>
-    <li>mute on|off - set mute state on|off</li>
-    <li>next - play next title in queue</li>
-    <li>pause - set state of player to "pause"</li>
-    <li>play - set state of player to "play"</li>
-    <li>playPlaylist &ltmyList&gt - play playlist &ltmyList&gt</li>
-    <li>playQueueItem &ltnr&gt - play title &ltnr&gt in queue</li>
-    <li>prev - play previous title in queue</li>
-    <li>repeat - set player repeat state (on_all|on_one|off)</li>
-    <li>saveQueue &ltmyList&gt - save queue as &ltmyList&gt</li>
-    <li>shuffle - set player shuffle state on|off</li>
-    <li>stop - set state of player to "stop"</li>
-    <li>volume - set volume 0..100</li>
-    <li>volumeDown - reduce volume by &ltvolumeDown&gt</li>
-    <li>volumeUp - increase volume by &ltvolumeUp&gt</li>
-  </ul>
-  <br><br>
-  <a name="HEOSPlayerget"></a>
-  <b>get</b>
-  <ul>
-    <li>ls - list music sources (input, playlists, favorites, music services, ...) </li>
-    <li>channelscount - number of favorites</li>
-    </ul>
-  <br><br>
-  <a name="HEOSPlayerstate"></a>
-  <b>state</b>
-  <ul>
-    <li>state of player connection (on|off)</li>
-  </ul>
- <br><br>
-  <a name="HEOSPlayerattributes"></a>
-  <b>attributes</b>
-  <ul>
-    <li>channelring - when reaching the last favorite ChannelUp/Down switches in circle, i.e. to the first/last favorite again</li>
-    <li>mute2play - if mute switch at speaker is pressed, the stream stops</li>
-  </ul>
-</ul>
-
-=end html
-
-=begin html_DE
-
-<a name="HEOSPlayer"></a>
-<h3>HEOSPlayer</h3>
-<ul>
-  <u><b>HEOSPlayer</b></u>
-  <br><br>
-  In Kombination mit HEOSMaster and HEOSGroup steuert dieses FHEM Modul das Denon Multiroom-Soundsystem mit Hilfe einer telnet Socket-Verbindung und dem HEOS Command Line Interface (CLI). 
-  <br><br>
-  Nachdem der Master einmal angelegt ist werden die Player und Gruppierungen des Systems automatisch erkannt und in FHEM angelegt. Von da an k&oumlnnen die Player und Gruppierungen gesteuert werden und Ver&aumlnderungen in der HEOS App oder am Reveiver werden mit dem Status und den Media Readings der Player und Gruppierungen synchronisiert.
-  <a name="HEOSPlayerreadings"></a>
- <br><br>
-  <b>Readings</b>
-  <ul>
-    <li>channel - Nr des gerade abgespielten Favoriten</li>
-    <li>currentAlbum - Name des gerade abgespielten Albums</li>
-    <li>currentArtist - Name des gerade abgespielten K&uumlnstlers</li>
-    <li>currentImageUrl - URL des Albumcovers, Senderlogos, etc.</li>
-    <li>currentMedia - Medientyp des gerade abgespielten Streams (song|station|genre|artist|album|container)</li>
-    <li>currentMid - media ID</li>
-    <li>currentQid - queue ID</li>
-    <li>currentSid - source ID</li>
-    <li>currentStation - Name des gerade abgespielten Senders</li>
-    <li>currentTitle - Name des gerade abgespielten Titels</li>
-    <li>ip-address - IP-Adresse des Players</li>
-    <li>lineout - lineout level type (variable|Fixed)</li>
-    <li>model - Modell des HEOS Lautsprechers (z.B. HEOS 1)</li>
-    <li>mute - Player mute Status (on|off)</li>
-    <li>name - Name des Players (aus der App &uumlbernommen)</li>
-    <li>network - Netzwerkverbindung (wired|wifi)</li>
-    <li>playStatus - Status des Players (play|pause|stop)</li>
-    <li>repeat - Player Repeat Status (on_all|on_one|off) </li>
-    <li>shuffle - Player Shuffle Status (on|off)</li>
-    <li>state - Status der Player-Verbindung (on|off)</li>
-    <li>version - Softwareversion des HEOS Lautsprechers</li>
-    <li>volume - aktuelle Lautst&aumlrke (0-100)</li>
-    <li>volumeDown - Schrittweite Lautst&aumlrke (1-10, default 5)</li>
-    <li>volumeUp - Schrittweite Lautst&aumlrke (1-10, default 5)</li>
-  </ul>
-  <br><br>
-  <a name="HEOSPlayerset"></a>
-  <b>set</b>
-  <ul>
-    <li>aux - aktiviert die Quelle am AUX-Eingang des Players</li>
-    <li>channel &ltnr&gt - spielt den vorher mit der App erstellten Favoriten &ltnr&gt ab</li>
-    <li>channelUp - schaltet auf den n&aumlchsten Favoriten in der Favoritenliste um</li>
-    <li>channelDown- schaltet auf vorherigen Favoriten in der Favoritenliste um</li>
-    <li>clear queue - l&oumlscht die Warteschlange</li>
-    <li>deletePlaylist &ltmyList&gt - l&oumlscht die Playlist &ltmyList&gt </li>
-    <li>getNowPlayingMedia - holt die Mediainfo vom aktuell abgespielten Mediastream</li>
-    <li>getPlayMode - holt den Player-Modus (repeat|shuffle)</li>
-    <li>getPlayState - holt den Player-Status (play|pause|stop)</li>
-    <li>getPlayerInfo - holt Player-Info (pid, gid, network, ...)</li>
-    <li>set &lthp1&gt groupWithMember &lthp2&gt - erzeugt eine Gruppierung mit hp1 als Leader und hp2 als Mitglied</li>
-    <li>input sid[,cid][,mid] - setze input source-id[,container-id][,media-id]  </li>
-    <li>mute on|off - setzt den mute Status on|off</li>
-    <li>next - spielt n&aumlchsten Titel in Warteschlange</li>
-    <li>pause - setzt den Status des Players auf "pause"</li>
-    <li>play - setzt den Status des Players auf "play"</li>
-    <li>playPlaylist &ltmyList&gt - spielt die Playlist &ltmyList&gt ab</li>
-    <li>playQueueItem &ltnr&gt - spielt Titel &ltnr&gt in Warteschlange</li>
-    <li>prev - spielt vorherigen Titel in Warteschlange</li>
-    <li>repeat - setzt den Player Repeat Status (on_all|on_one|off) </li>
-    <li>saveQueue &ltmyList&gt - speichert die Warteschlange als Playlist &ltmyList&gt</li>
-    <li>shuffle - setzt den Player Shuffle Status auf on|off</li>
-    <li>stop - setzt den Status des Players auf "stop"</li>
-    <li>volume - setzt die Lautst&aumlrke auf 0..100</li>
-    <li>volumeDown - verringert die Lautst&aumlrke um &ltvolumeDown&gt</li>
-    <li>volumeUp - erh&oumlht die Lautst&aumlrke um &ltvolumeUp&gt</li>
-  </ul>
-  <br><br>
-  <a name="HEOSPlayerget"></a>
-  <b>get</b>
-  <ul>
-    <li>ls - listet Musikquellen (Eing&aumlnge, Playlists, Favorites, Musik-Dienste, ...)</li>
-    <li>channelscount - Anzahl der Favoriten</li>
-    </ul>
-  <br><br>
-  <a name="HEOSPlayerstate"></a>
-  <b>state</b>
-  <ul>
-    <li>Status der Player-Verbindung (on|off)</li>
-  </ul>
- <br><br>
-  <a name="HEOSPlayerattributes"></a>
-  <b>attributes</b>
-  <ul>
-    <li>channelring - Beim Erreichen des letzten Favoriten schaltet ChannelUp/Down im Kreis, also wieder auf den ersten/letzten Favoriten</li>
-    <li>mute2play - Beim Bet&aumltigen der Mute-Taste am Lautsprecher wird auch der Stream angehalten</li>
-  </ul>
-</ul>
-
-=end html_DE
-
-=cut

@@ -6,8 +6,7 @@
 #  All rights reserved
 #
 #   Special thanks goes to comitters:
-#       - Olaf Schnicke         Thanks for many many Code
-#       - Dieter Hehlgans       Thanks for Commandref
+#       - Olaf Schnicke
 #
 #
 #  This script is free software; you can redistribute it and/or modify
@@ -55,7 +54,7 @@ eval "use IO::Socket::Multicast;1" or $missingModulNet .= "IO::Socket::Multicast
 
 
 
-my $version = "0.1.75";
+my $version = "0.1.72";
 
 my %heosCmds = (
     'enableChangeEvents'        => 'system/register_for_change_events?enable=',
@@ -74,7 +73,7 @@ my %heosCmds = (
     'getMute'                   => 'player/get_mute?',
     'getGroupMute'              => 'group/get_mute?',
     'getQueue'                  => 'player/get_queue?',
-    'playQueue'                 => 'player/play_queue?',
+    'playQueueItem'             => 'player/play_queue?',
     'clearQueue'                => 'player/clear_queue?',
     'saveQueue'                 => 'player/save_queue?',
     'getVolume'                 => 'player/get_volume?',
@@ -135,7 +134,7 @@ sub HEOSMaster_GetInputs($);
 sub HEOSMaster_GetMusicSources($);
 sub HEOSMaster_GetPlaylists($);
 sub HEOSMaster_GetServers($);
-sub HEOSMaster_MakePlayLink($$$$);
+sub HEOSMaster_MakePlayLink($$$$$$$);
 sub HEOSMaster_MakeImage($$);
 
 
@@ -768,8 +767,18 @@ sub HEOSMaster_ResponseProcessing($$) {
                         my @list;
                         my $xcmd;
                         my $xtext;
-                        my $ret = "$hash->{helper}{blocking}{$idx}{sourcename}\n";
-                        $ret .= sprintf( "%-35s %-15s %s\n", 'key', 'type', 'title' );
+                        my $ret;
+
+                        if( $hash->{helper}{blocking}{$idx}{cl}->{TYPE} eq 'FHEMWEB' ) {
+
+                            $ret = '<div class="container">';
+                            $ret .= '<h2 style="text-align: center;">'.$hash->{helper}{blocking}{$idx}{sourcename}.'</h2><hr>';
+
+                        } else {
+                    
+                            $ret .= $hash->{helper}{blocking}{$idx}{sourcename}."\n";
+                            $ret .= sprintf( "%-15s %s\n", 'key', 'title' );
+                        }
 
                         if ( $message{sid} eq "1025" ) {
                         
@@ -795,25 +804,29 @@ sub HEOSMaster_ResponseProcessing($$) {
 
                         my $x = 0;
                         foreach my $item (@list) {
-                            $ret .= HEOSMaster_MakePlayLink($hash->{helper}{blocking}{$idx}{name}, \%message, $item, ++$x);
+                            $ret .= HEOSMaster_MakePlayLink($hash->{helper}{blocking}{$idx}{cl}->{TYPE}, $hash->{helper}{blocking}{$idx}{name}, \%message, $item, ++$x, 64, 64);
                         }
 
-                        $ret .= "\n\n";
-                        
+
                         if( $hash->{helper}{blocking}{$idx}{cl}->{TYPE} eq 'FHEMWEB' ) {
-                        
+
+                            $ret .= '</div></div>';
                             $ret =~ s/&/&amp;/g;
                             $ret =~ s/'/&apos;/g;
                             $ret =~ s/\n/<br>/g;
                             $ret = "<pre>$ret</pre>" if( $ret =~ m/  / );
                             $ret = "<html>$ret</html>";
-                        
+
                         } else {
-                        
-                            $ret =~ s/<a[^>]*>//g;
-                            $ret =~ s/<\/a>//g;
-                            $ret =~ s/<img[^>]*>\n//g;
-                            $ret .= "\n";
+
+                            #$ret =~ s/<a[^>]*>//g;
+                            #$ret =~ s/<\/a>//g;
+                            #$ret =~ s/<img[^>]*>\n//g;
+                            #$ret =~ s/<div[^>]*>//g;
+                            #$ret =~ s/<\/div>//g;
+                            #$ret =~ s/<h2[^>]*>//g;
+                            #$ret =~ s/<\/h2>//g;
+                            #$ret .= "\n";
                         }
 
                         asyncOutput( $hash->{helper}{blocking}{$idx}{cl}, $ret );
@@ -1314,7 +1327,7 @@ sub HEOSMaster_ReadPassword($) {
     }
 }
 
-sub HEOSMaster_MakePlayLink($$$$) {
+sub HEOSMaster_MakePlayLink3($$$$) {
 
     my ($name, $message, $item, $idx) = @_;
     my $xcmd;
@@ -1372,6 +1385,82 @@ sub HEOSMaster_MakePlayLink($$$$) {
     return '<li style="list-style-type: none; display: inline;"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", $xtext, $item->{type}, $item->{name} )."</a></li>\n";
 }
 
+sub HEOSMaster_MakePlayLink($$$$$$$) {
+
+    my ($type, $name, $message, $item, $idx, $xsize, $ysize) = @_;
+    my $xcmd;
+    my $xtext = $message->{sid};
+
+    $ysize = '10.75em' if (!defined($ysize));
+
+    if ( (exists $item->{playable} && $item->{playable} eq "yes") || exists $item->{qid} ) {
+
+        $xcmd = 'cmd'.uri_escape('=set '.$name.' input '.$message->{sid});
+        $xtext = '*'.$xtext;
+
+    } else {
+
+        $xcmd = 'cmd'.uri_escape('=get '.$name.' ls '.$message->{sid});
+    }
+
+    if ( defined $item->{sid} ) {
+
+        $xcmd = 'cmd'.uri_escape('=get '.$name.' ls '.$message->{sid});
+        $xcmd .= uri_escape(",".$item->{sid});
+        $xtext .= ','.$item->{sid};
+
+    } elsif ( defined $item->{cid} ) {
+        if ( $item->{type} eq "album" ) {
+
+            $xcmd = 'cmd'.uri_escape('=get '.$name.' ls '.$message->{sid});
+        }
+
+        $xcmd .= uri_escape(",".$item->{cid});
+        $xtext .= ','.$item->{cid};
+
+    } elsif ( defined $item->{mid} ) {
+        if ( $message->{sid} eq "1028" ) {
+
+            $xcmd .= ','.$idx;
+            $xtext .= ','.$idx;
+
+        } elsif ( defined $message->{cid} ) {
+
+            $xcmd .= uri_escape(','.$message->{cid}.','.$item->{mid});
+            $xtext .= ','.$message->{cid}.','.$item->{mid};
+
+        } else {
+
+            $xcmd = 'cmd'.uri_escape('=set '.$name.' input 1027');
+            $xcmd .= uri_escape(','.$message->{sid}.','.$item->{mid});
+            $xtext = '1027,'.$message->{sid}.','.$item->{mid};
+        }
+    } elsif ( defined $item->{qid} ) {
+
+        $xcmd .= ','.$item->{qid};
+        $xtext .= ','.$item->{qid};
+    }
+
+    if( $type eq 'FHEMWEB' ) {
+    
+        $xcmd = "FW_cmd('$FW_ME$FW_subdir?XHR=1&$xcmd')";
+
+        if ( defined $item->{image_url} && $item->{image_url} ne "" ) {
+            return '<a href="#" onClick="'.$xcmd.'" class="list-group-item" style="display: flex;align-items: center;cursor:pointer;"><img style="width: '.$xsize.'px; height: '.$ysize.'px;" src="'.$item->{image_url}.'"><h5 class="list-group-item-heading" style="padding: 10px;">'.$item->{name}.'</h5></a>';
+
+            #return '<div style="clear: left;display: flex;align-items: center;float: left;cursor:pointer;" onclick="'.$xcmd.'"><img style="width: '.$xsize.'px;  height: '.$ysize.'px;" src="'.$item->{image_url}.'"/>'.$item->{name}."</div>\n\n";
+        } else {
+            return '<a href="#" onClick="'.$xcmd.'" class="list-group-item"><h4 class="list-group-item-heading">'.$item->{name}.'</h4></a>';
+            #return '<div style="clear: left;display: flex;align-items: center;float: left;cursor:pointer;" onclick="'.$xcmd.'"><a style="cursor:pointer" onclick="'.$xcmd.'">'.sprintf( "%-35s %-15s %s", $xtext, $item->{type}, $item->{name} )."</a></div>\n\n";
+        }
+
+    } else {
+
+        return sprintf( "%-15s %s\n", $xtext, $item->{name} );
+
+    }
+}
+
 sub HEOSMaster_MakeImage($$) {
 
     my ($url, $size) = @_;
@@ -1403,7 +1492,7 @@ sub HEOSMaster_MakeImage($$) {
 <h3>HEOSMaster</h3>
 <ul>
   <u><b>HEOSMaster</b></u>
-  <br><br>
+  <br>
   In combination with HEOSPlayer and HEOSGroup this FHEM Module controls the Denon multiroom soundsystem using a telnet socket connection and the HEOS Command Line Interface (CLI).
   <br><br>
   <b>Prerequisite</b>
@@ -1422,7 +1511,7 @@ sub HEOSMaster_MakeImage($$) {
       <code>define MyMasterBox HEOSMaster 192.168.178.67</code><br>
     </ul>
     <br>
-    &ltIP address&gt is the IP address of Your HEOS receiver or HEOS box. The master device is created in the room HEOS, then the players of Your system are recognized automatically and created in FHEM. From now on the players can be controlled and changes in the HEOS app or at the Receiver are synchronized with the state and media readings of the players.
+    &ltIP address&gt is the IP address of Your HEOS receiver or HEOS box. The master device is created in the room HEOS, then the players of Your system are automatically recognized and created in FHEM. From now on the players can be controlled and changes in the HEOS app or at the Receiver are synchronized with the state and media readings of the players.
   <a name="HEOSMasterreadings"></a>
  <br><br>
   <b>Readings</b>
@@ -1461,16 +1550,8 @@ sub HEOSMaster_MakeImage($$) {
     <li>connected - the HEOSmaster is connected to the CLI Master</li>
     <li>not connected - the HEOSmaster is not connected to the CLI Master</li>
   </ul>
- <br><br>
-  <a name="HEOSMasterattributes"></a>
-  <b>attributes</b>
-  <ul>
-    <li>heosUsername - username of Your HEOS account</li>
-  </ul>
-  <br><br>
-</ul>
   
-=end html
+  =end html
 
 =begin html_DE
 
@@ -1478,7 +1559,7 @@ sub HEOSMaster_MakeImage($$) {
 <h3>HEOSMaster</h3>
 <ul>
   <u><b>HEOSMaster</b></u>
-  <br><br>
+  <br>
   In Kombination mit HEOSPlayer und HEOSGroup steuert dieses FHEM Modul das Denon Multiroom-Soundsystem mit Hilfe einer telnet Socket-Verbindung und dem HEOS Command Line Interface (CLI).
   <br><br>
   <b>Voraussetzung</b>
@@ -1538,14 +1619,6 @@ Von nun an k&oumlnnen die Player gesteuert werden. Au&szligerdem wird der Status
     <li>connected - der HEOSmaster ist mit dem CLI Master verbunden</li>
     <li>not connected - der HEOSmaster ist nicht mit dem CLI Master verbunden</li>
   </ul>
- <br><br>
-  <a name="HEOSMasterattributes"></a>
-  <b>Attributes</b>
-  <ul>
-    <li>heosUsername - Benutzername des HEOS Kontos</li>
-  </ul>
-  <br><br>
-</ul>
 
 =end html_DE
 
