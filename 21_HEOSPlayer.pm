@@ -787,7 +787,7 @@ sub HEOSPlayer_Set($$@) {
             $list .= " playPlaylist:".join(",",@playlists) if( scalar @playlists > 0 );
             $list .= " deletePlaylist:".join(",",@playlists) if( scalar @playlists > 0 );
         }
-        print "List#########################################################\n".Dumper($list);
+        #print "List#########################################################\n".Dumper($list);
         $list .= " aux:noArg" if ( exists $hash->{helper}{aux} );
         return "Unknown argument $cmd, choose one of $list";
     }
