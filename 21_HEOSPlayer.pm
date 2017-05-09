@@ -37,9 +37,9 @@ use warnings;
 use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 use URI::Escape;
-use Data::Dumper;
+#use Data::Dumper;
 
-my $version = "0.1.76";
+my $version = "0.1.80";
 
 
 
@@ -759,8 +759,10 @@ sub HEOSPlayer_Set($$@) {
         }
         
     } else {
-                                              
-        my  $list = "getPlayerInfo:noArg getPlayState:noArg getNowPlayingMedia:noArg getPlayMode:noArg play:noArg stop:noArg pause:noArg mute:on,off volume:slider,0,5,100 volumeUp:slider,0,1,10 volumeDown:slider,0,1,10 repeat:one,all,off shuffle:on,off next:noArg prev:noArg  input";
+        
+        #### alte get Befehle sollen raus
+        #### getPlayerInfo:noArg getPlayState:noArg getNowPlayingMedia:noArg getPlayMode:noArg
+        my  $list = "play:noArg stop:noArg pause:noArg mute:on,off volume:slider,0,5,100 volumeUp:slider,0,1,10 volumeDown:slider,0,1,10 repeat:one,all,off shuffle:on,off next:noArg prev:noArg  input";
 
         my @players = devspec2array("TYPE=HEOSPlayer:FILTER=NAME!=$name");
         $list .= " groupWithMember:multiple-strict," . join( ",", @players ) if ( scalar @players > 0 );
@@ -1119,6 +1121,8 @@ sub HEOSPlayer_makeImage($$) {
     <li>currentSid - source ID</li>
     <li>currentStation - name of now playing station</li>
     <li>currentTitle - name of now playing title</li>
+    <li>error - last error</li>
+    <li>gid - ID of group, in which player is member</li>
     <li>ip-address - ip address of the player</li>
     <li>lineout - lineout level type (variable|Fixed)</li>
     <li>model - model of HEOS speaker (e.g. HEOS 1)</li>
@@ -1150,6 +1154,10 @@ sub HEOSPlayer_makeImage($$) {
     <li>getPlayerInfo - get player info (pid, gid, network, ...)</li>
     <li>set &lthp1&gt groupWithMember &lthp2&gt - creates group with hp1 as leader and hp2 as member</li>
     <li>input sid[,cid][,mid] - set input source-id[,container-id][,media-id]  </li>
+    <ul>
+        <code>Example: set kitchen input 1027,1772574848,inputs/tvaudio<br>
+        starts "tv audio" on player "kitchen"</code>
+    </ul>
     <li>mute on|off - set mute state on|off</li>
     <li>next - play next title in queue</li>
     <li>pause - set state of player to "pause"</li>
@@ -1183,7 +1191,7 @@ sub HEOSPlayer_makeImage($$) {
   <b>attributes</b>
   <ul>
     <li>channelring - when reaching the last favorite ChannelUp/Down switches in circle, i.e. to the first/last favorite again</li>
-    <li>mute2play - if mute switch at speaker is pressed, the stream stops</li>
+    <li>mute2play - if mute switch on speaker is pressed, the stream stops</li>
   </ul>
 </ul>
 
@@ -1213,6 +1221,8 @@ sub HEOSPlayer_makeImage($$) {
     <li>currentSid - source ID</li>
     <li>currentStation - Name des gerade abgespielten Senders</li>
     <li>currentTitle - Name des gerade abgespielten Titels</li>
+    <li>error - letzte Fehlermeldung</li>
+    <li>gid - ID der Gruppe, in der der Player Mitglied ist</li>
     <li>ip-address - IP-Adresse des Players</li>
     <li>lineout - lineout level type (variable|Fixed)</li>
     <li>model - Modell des HEOS Lautsprechers (z.B. HEOS 1)</li>
@@ -1244,6 +1254,10 @@ sub HEOSPlayer_makeImage($$) {
     <li>getPlayerInfo - holt Player-Info (pid, gid, network, ...)</li>
     <li>set &lthp1&gt groupWithMember &lthp2&gt - erzeugt eine Gruppierung mit hp1 als Leader und hp2 als Mitglied</li>
     <li>input sid[,cid][,mid] - setze input source-id[,container-id][,media-id]  </li>
+        <ul>
+        <code>Beispiel: set K&uumlche input 1027,1772574848,inputs/tvaudio<br>
+        startet "TV-Audio" auf dem Player "K&uumlche"</code>
+    </ul>
     <li>mute on|off - setzt den mute Status on|off</li>
     <li>next - spielt n&aumlchsten Titel in Warteschlange</li>
     <li>pause - setzt den Status des Players auf "pause"</li>
@@ -1263,7 +1277,7 @@ sub HEOSPlayer_makeImage($$) {
   <a name="HEOSPlayerget"></a>
   <b>get</b>
   <ul>
-    <li>ls - listet Musikquellen (Eing&aumlnge, Playlists, Favorites, Musik-Dienste, ...)</li>
+    <li>ls - listet Musikquellen (Eing&aumlnge, Playlists, Favoriten, Musik-Dienste, ...)</li>
     <li>channelscount - Anzahl der Favoriten</li>
     </ul>
   <br><br>
@@ -1280,7 +1294,7 @@ sub HEOSPlayer_makeImage($$) {
     <li>mute2play - Beim Bet&aumltigen der Mute-Taste am Lautsprecher wird auch der Stream angehalten</li>
   </ul>
 </ul>
-
+  
 =end html_DE
 
 =cut

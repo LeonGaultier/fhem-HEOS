@@ -42,7 +42,7 @@ package main;
 
 use strict;
 use warnings;
-use Data::Dumper;
+#use Data::Dumper;
 
 my $missingModul = "";
 my $missingModulNet = "";
@@ -55,7 +55,7 @@ eval "use IO::Socket::Multicast;1" or $missingModulNet .= "IO::Socket::Multicast
 
 
 
-my $version = "0.1.76";
+my $version = "0.1.80";
 
 my %heosCmds = (
     'enableChangeEvents'        => 'system/register_for_change_events?enable=',
@@ -178,14 +178,14 @@ sub HEOSMaster_Define($$) {
 
     
     return "too few parameters: define <name> HEOSMaster <HOST>" if( @a != 3 );
-
+    return "Cannot define a HEOS device. Perl modul $missingModul is missing." if ( $missingModul );
+    
     my $name            = $a[0];
     my $host            = $a[2];
 
     $hash->{HOST}       = $host;
     $hash->{VERSION}    = $version;
 
-    return Log3 $name, 3, "Cannot define a HEOS device. Perl modul $missingModul is missing." if ( $missingModul );
 
     Log3 $name, 3, "HEOSMaster ($name) - defined with host $host";
     $attr{$name}{room} = "HEOS" if( !defined( $attr{$name}{room} ) );
@@ -1557,7 +1557,8 @@ sub HEOSMaster_MakeImage($$) {
   <ul>
     <li>heosUsername - username of Your HEOS account</li>
   </ul>
-  <br><br>
+    <br><br>
+  </ul>
 </ul>
   
 =end html
@@ -1634,7 +1635,8 @@ Von nun an k&oumlnnen die Player gesteuert werden. Au&szligerdem wird der Status
   <ul>
     <li>heosUsername - Benutzername des HEOS Kontos</li>
   </ul>
-  <br><br>
+    <br><br>
+  </ul>
 </ul>
 
 =end html_DE

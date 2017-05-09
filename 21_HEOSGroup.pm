@@ -38,7 +38,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
 
-my $version = "0.1.76";
+my $version = "0.1.80";
 
 
 
@@ -688,7 +688,7 @@ sub HEOSGroup_GetGroupMute($) {
     <li>channelUp - switches to next favorite</li>
     <li>channelDown- switches to previous favorite</li>
     <li>clearGroup - dissolves the group (sets state to off)</li>
-    <li>GetGroupInfo - get media info of the group</li>
+    <li>getGroupInfo - get media info of the group</li>
     <li>mute on|off - set mute state on|off</li>
     <li>next - play next title in queue</li>
     <li>pause - set state of player to "pause"</li>
@@ -707,7 +707,7 @@ sub HEOSGroup_GetGroupMute($) {
   <b>state</b>
   <ul>
     <li>state of group (on|off)</li>
-  </ul>  
+  </ul>
 </ul>
 
 =end html
@@ -776,7 +776,6 @@ sub HEOSGroup_GetGroupMute($) {
     <li>playPlaylist &ltmyList&gt - spielt die Playlist &ltmyList&gt ab</li>
     <li>prev - spielt vorherigen Titel in Warteschlange</li>
     <li>repeat - setzt den Player Repeat Status (on_all|on_one|off) </li>
-    <li>saveQueue &ltmyList&gt - speichert die Warteschlange als Playlist &ltmyList&gt</li>
     <li>shuffle - setzt den Player Shuffle Status auf on|off</li>
     <li>stop - setzt den Status des Players auf "stop"</li>
     <li>volume - setzt die Lautst&aumlrke auf 0..100</li>
