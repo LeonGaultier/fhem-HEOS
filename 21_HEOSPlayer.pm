@@ -39,7 +39,7 @@ use Encode qw(encode_utf8);
 use URI::Escape;
 #use Data::Dumper;
 
-my $version = "0.1.80";
+my $version = "0.2.0";
 
 
 
@@ -1148,10 +1148,6 @@ sub HEOSPlayer_makeImage($$) {
     <li>channelDown- switches to previous favorite</li>
     <li>clear queue - clears the queue</li>
     <li>deletePlaylist &ltmyList&gt - clears playlist &ltmyList&gt</li>
-    <li>getNowPlayingMedia - get media info from now playing stream</li>
-    <li>getPlayMode - get player mode (repeat|shuffle)</li>
-    <li>getPlayState - get player state (play|pause|stop)</li>
-    <li>getPlayerInfo - get player info (pid, gid, network, ...)</li>
     <li>set &lthp1&gt groupWithMember &lthp2&gt - creates group with hp1 as leader and hp2 as member</li>
     <li>input sid[,cid][,mid] - set input source-id[,container-id][,media-id]  </li>
     <ul>
@@ -1248,10 +1244,6 @@ sub HEOSPlayer_makeImage($$) {
     <li>channelDown- schaltet auf vorherigen Favoriten in der Favoritenliste um</li>
     <li>clear queue - l&oumlscht die Warteschlange</li>
     <li>deletePlaylist &ltmyList&gt - l&oumlscht die Playlist &ltmyList&gt </li>
-    <li>getNowPlayingMedia - holt die Mediainfo vom aktuell abgespielten Mediastream</li>
-    <li>getPlayMode - holt den Player-Modus (repeat|shuffle)</li>
-    <li>getPlayState - holt den Player-Status (play|pause|stop)</li>
-    <li>getPlayerInfo - holt Player-Info (pid, gid, network, ...)</li>
     <li>set &lthp1&gt groupWithMember &lthp2&gt - erzeugt eine Gruppierung mit hp1 als Leader und hp2 als Mitglied</li>
     <li>input sid[,cid][,mid] - setze input source-id[,container-id][,media-id]  </li>
         <ul>

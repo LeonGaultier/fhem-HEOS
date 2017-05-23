@@ -38,7 +38,7 @@ use JSON qw(decode_json);
 use Encode qw(encode_utf8);
 
 
-my $version = "0.1.80";
+my $version = "0.2.0";
 
 
 

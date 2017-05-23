@@ -32,7 +32,19 @@
 
 #################################
 ######### Wichtige Hinweise und Links #################
-
+#
+## Das JSON Modul immer in einem eval aufrufen
+# $data = eval{decode_json($data)};
+#
+# if($@){
+#   Log3($SELF, 2, "$TYPE ($SELF) - error while request: $@");
+#  
+#   readingsSingleUpdate($hash, "state", "error", 1);
+#
+#   return;
+# }
+##
+##
 ##
 #
 
@@ -45,17 +57,16 @@ use warnings;
 #use Data::Dumper;
 
 my $missingModul = "";
-my $missingModulNet = "";
 
 eval "use Net::Telnet;1" or $missingModul .= "Net::Telnet ";
 eval "use JSON;1" or $missingModul .= "JSON ";
 eval "use Encode;1" or $missingModul .= "Encode ";
-eval "use IO::Socket::Multicast;1" or $missingModulNet .= "IO::Socket::Multicast ";
+eval "use IO::Socket::Multicast;1" or $missingModul .= "IO::Socket::Multicast ";
 
 
 
 
-my $version = "0.1.80";
+my $version = "0.2.0";
 
 my %heosCmds = (
     'enableChangeEvents'        => 'system/register_for_change_events?enable=',
