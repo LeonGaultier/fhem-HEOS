@@ -39,7 +39,7 @@ use Encode qw(encode_utf8);
 use URI::Escape;
 #use Data::Dumper;
 
-my $version = "0.2.5";
+my $version = "1.0.0";
 
 
 

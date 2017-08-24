@@ -65,7 +65,7 @@ eval "use Encode;1" or $missingModul .= "Encode ";
 
 
 
-my $version = "0.2.5";
+my $version = "1.0.0";
 
 my %heosCmds = (
     'enableChangeEvents'        => 'system/register_for_change_events?enable=',
