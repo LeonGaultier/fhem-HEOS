@@ -228,7 +228,7 @@ sub HEOSMaster_Undef($$) {
     HEOSMaster_Close($hash);
     delete $modules{HEOSMaster}{defptr}{$hash->{HOST}};
     
-    Log3 $name, 3, "HEOSPlayer ($name) - device $name deleted";
+    Log3 $name, 3, "HEOSMaster ($name) - device $name deleted";
     return undef;
 }
 
