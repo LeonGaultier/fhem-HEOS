@@ -39,7 +39,7 @@ use Encode qw(encode_utf8);
 use URI::Escape;
 #use Data::Dumper;
 
-my $version = "1.0.3";
+my $version = "1.0.4";
 
 
 
@@ -938,7 +938,7 @@ sub HEOSPlayer_PreProcessingReadings($$) {
     
         $buffer{'shuffle'}  = $message{shuffle};
         $buffer{'repeat'}   = $message{repeat};
-        $buffer{'repeat'}   =~ s/.*\_(.*)/$1/g;
+        $buffer{'repeat'}   =~ s/.*\_(.*)/$1/g if( defined($buffer{'repeat'}) );
         
     } elsif ( $decode_json->{heos}{command} =~ /get_mute/ ) {
     
