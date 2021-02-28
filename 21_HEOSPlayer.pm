@@ -39,7 +39,7 @@ use Encode qw(encode_utf8);
 use URI::Escape;
 #use Data::Dumper;
 
-my $version = "1.0.4";
+my $version = "1.0.5";
 
 
 
@@ -603,7 +603,8 @@ sub HEOSPlayer_Set($$@) {
     
         my $mid;
         my $cid = $args[0];
-        my @path = split(",", $args[0]) if ( @args != 0 && $args[0] =~ /,/ );     
+        my @path;
+        @path = split(",", $args[0]) if ( @args != 0 && $args[0] =~ /,/ );     
         $cid = $path[0] if ( scalar @path > 0); 
         $mid = $path[1] if ( scalar @path > 1); 
 
